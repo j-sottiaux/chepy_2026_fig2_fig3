@@ -27,13 +27,13 @@ extract_gene_data <- function(df, gene, source_name) {
   
   gene_row <- df[rownames(df) == gene, ]
   
-  # Define LFQ column mapping (remove NS - it can be added again if need to)
+  # Define LFQ column mapping (
   gene_long <- tibble(
     Condition = c(rep("dcSSc_ATAp", 10),   # LFQ 1–10
                   rep("dcSSc_ATAn", 10),   # LFQ 11–20
                   rep("lcSSc_ACA", 10),    # LFQ 21–30
                   rep("HC", 10)),          # LFQ 31–40
-    LFQ = as.numeric(gene_row[1, 1:40])    # Only first 40 columns (drop NS)
+    LFQ = as.numeric(gene_row[1, 1:40])    # Only first 40 columns (drop NS but we can put it back if we need to)
   )
   
   gene_long$Compartment <- source_name
@@ -73,7 +73,7 @@ condition_colors <- c(
   "HC"         = "#C8C6BD"
 )
 
-# Condition into ordered factor to plot as we like
+# Condition into ordered factor to plot in the order we like
 plot_data$Condition <- factor(plot_data$Condition, levels = condition_order)
 
 # Create the boxplot
