@@ -797,6 +797,34 @@ plot_theme <- {
   )
 }
 
+publication_theme <- {
+  theme(
+    # General aspect of the plot
+    plot.background = element_rect(fill = "#FFFFFF"),
+    panel.background = element_rect(fill = "#FFFFFF"),
+    plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt"),
+    plot.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(2)),
+    plot.subtitle = element_text(color = "black", family = "Helvetica Neue", hjust = 0, size = rel(1.2)),
+    
+    # Axis titles and texts
+    axis.title.x = element_text(color = "black", family = "Helvetica Neue", size = rel(1)),
+    axis.text.x = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9), angle = 0, hjust = 0.5),
+    axis.title.y = element_text(color = "black", family = "Helvetica Neue", size = rel(1)), ,
+    axis.text.y = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9), angle = 0, hjust = 0.5),
+    axis.line = element_line(color = "#5f5f5f", linetype = "solid", linewidth = 0.25),
+    axis.ticks = element_line(color = "black", linetype = "solid", linewidth = 0.25),
+    panel.grid.major = element_line(color = "#EAEAEA", linetype = "dotted", linewidth = 0.25),
+    
+    # Legend
+    legend.box.margin = margin(0.1, 0.1, 0.1, 0.1),
+    legend.position = c(0.8, 0.85),
+    legend.background = element_rect(fill = "#FFFFFF", color = "#5f5f5f", linewidth = 0.1, linetype = "solid"),
+    legend.key.size = unit(0.5, "cm"),
+    legend.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", size = rel(1)),
+    legend.text = element_text(color = "black", family = "Helvetica Neue", face = "italic", size = rel(0.9))
+  )
+}
+
 create_heatmap <- function(matrix, matrix_type, save_path = "figures/01_exploratory_analysis") {
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
@@ -907,12 +935,12 @@ create_volcano_plots <- function(toptables, save_path = "figures/02_differential
       scale_x_continuous(breaks = seq(-8, 8, 2)) +
       scale_y_continuous(breaks = seq(0, 20, 2)) +
       labs(
-        title = paste("Volcano plot /", name),
+        title = paste(name),
         subtitle = "Differential abundance of proteins (labeled as gene names)",
         x = "Shrunk logFC (ashr)",
         y = "-log10 adjusted p-value"
       ) +
-      plot_theme
+      publication_theme
     
     # Save the plot
     file_name <- paste0("volcano_plot_", name, ".png")
