@@ -4,6 +4,8 @@
 {
   library(data.table)
   library(tidyverse)
+  library(ggplot2)
+  library(ggpubr)
 
 }
 
@@ -72,18 +74,31 @@ condition_colors <- c(
   "lcSSc_ACA"  = "#F71735",
   "HC"         = "#C8C6BD"
 )
+condition_comparisons <- list(
+  c("dcSSc_ATAp", "dcSSc_ATAn"),
+  c("dcSSc_ATAn", "lcSSc_ACA"),
+  c("dcSSc_ATAp", "lcSSc_ACA"),
+  c("lcSSc_ACA", "HC"),
+  c("dcSSc_ATAn", "HC"),
+  c("dcSSc_ATAp", "HC")
+)
 
 # Condition into ordered factor to plot in the order we like
 plot_data$Condition <- factor(plot_data$Condition, levels = condition_order)
 
 # Create the boxplot
 lfq_boxplot <- ggplot(plot_data, aes(x = Condition, y = LFQ, fill = Condition, color = Condition)) +
-  #geom_boxplot(outlier.shape = NA, alpha = 0.4, linewidth = 0.3) +               # shape set to boxplot by default here
+  #geom_boxplot(outlier.shape = NA, alpha = 0.4, linewidth = 0.3) +             # shape set to boxplot by default here
   geom_violin(trim = FALSE, alpha = 0.4) +                                      # change shape to violin here
   geom_jitter(width = 0.1, size = 1, alpha = 0.5) +
   scale_fill_manual(values = condition_colors) +
   scale_color_manual(values = condition_colors) +
   stat_summary(fun = mean, geom = "point", shape  = 18, size = 3, alpha = 0.9, color = "#5f5f5f") +
+  stat_compare_means(
+    comparisons = condition_comparisons,
+    method = "wilcox.test",      
+    label = "p.signif",
+  ) +
   facet_wrap(~Compartment, ncol = 1, scales = "free_y") +
   labs(
     title = paste("LFQ intensities for", gene_of_interest),
@@ -127,3 +142,4 @@ ggsave(
   units = "in",
   dpi = 600
 )
+
