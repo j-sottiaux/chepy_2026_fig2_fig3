@@ -78,3 +78,80 @@ nucleus_endoMT_signature_genes <-  nucleus_df[rownames(nucleus_df) %in% EC_endoM
 nucleus_endoMT_heatmap <- pheatmap(nucleus_endoMT_signature_genes,
                                      main = "nucleus FB endoMT gene signature expression levels",
                                      cluster_cols = TRUE,)
+
+
+
+
+
+
+
+
+plot_dim_reduction <- function(df, save_path = "figures/01_exploratory_analysis") {
+  if (!dir.exists(save_path)) {
+    dir.create(save_path, recursive = TRUE)
+  }
+  
+  # Extract object name
+  df_name <- deparse(substitute(df))
+  matrix_type <- sub("_.*", "", df_name)
+  analysis_type <- sub(".*_", "", df_name)
+  
+  print(matrix_type)
+  print(analysis_type)
+  
+  # Extract data
+  data <- df$data
+  
+  # Build plot
+  final_plot <- ggplot(data, aes(x = x, y = y, color = group)) +
+    geom_point(size = 3) +
+    stat_ellipse(level = 0.95) +
+    scale_color_manual(values = condition_colors) +
+    labs(
+      title = paste(toupper(analysis_type), "-", matrix_type),
+      x = "Principal Component 1",
+      y = "Principal Component 2"
+    ) +
+    theme(
+      # General aspect
+      plot.background = element_rect(fill = "#FFFFFF"),
+      panel.background = element_rect(fill = "#FFFFFF"),
+      plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt"),
+      plot.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(2)),
+      plot.subtitle = element_text(color = "black", family = "Helvetica Neue", hjust = 0, size = rel(1.2)),
+      
+      # Axis
+      axis.title.x = element_text(color = "black", family = "Helvetica Neue", size = rel(1)),
+      axis.text.x = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)),
+      axis.title.y = element_text(color = "black", family = "Helvetica Neue", size = rel(1)),
+      axis.text.y = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)),
+      axis.line = element_line(color = "#5f5f5f", linewidth = 0.25),
+      axis.ticks = element_line(color = "black", linewidth = 0.25),
+      panel.grid.major = element_line(color = "#EAEAEA", linetype = "dotted", linewidth = 0.25),
+      
+      # Legend
+      legend.box.margin = margin(0.1, 0.1, 0.1, 0.1),
+      legend.position = "bottom",
+      legend.background = element_rect(fill = "#FFFFFF", color = "#5f5f5f", linewidth = 0.1),
+      legend.key.size = unit(0.5, "cm"),
+      legend.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", size = rel(1)),
+      legend.text = element_text(color = "black", family = "Helvetica Neue", face = "italic", size = rel(0.9))
+    )
+  
+  # Save plot
+  file_name <- paste0(matrix_type, analysis_type, ".png")
+  ggsave(
+    filename = file_name,
+    plot = final_plot,
+    path = save_path,
+    width = 7.7,
+    height = 7.5,
+    units = "in",
+    dpi = 600
+  )
+  
+  message(paste(file_name, "saved in:", save_path))
+  print(final_plot)
+}
+
+plot_dim_reduction(cytoplasm_pca)

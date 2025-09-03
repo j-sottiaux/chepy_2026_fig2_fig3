@@ -146,9 +146,9 @@ compute_pca <- function(df, matrix_type, save_path = "figures/01_exploratory_ana
                          title = paste(matrix_type, "/", "PCA - comp. 1~2"),
                          gg = TRUE
   )
-  
+
   pca_plot <- plot_list$graph
-  
+
   final_plot <- pca_plot +
     theme(
       plot.background = element_rect(fill = "#F0F0F0", color = NA),
@@ -166,20 +166,20 @@ compute_pca <- function(df, matrix_type, save_path = "figures/01_exploratory_ana
       strip.background = element_rect(fill = "#36595F"),
       strip.text = element_text(color = "white", face = "bold", size = rel(1))
     )
-  
-  # Save file
-  file_name <- paste0("pca_", matrix_type, ".png")
-  ggsave(
-    filename = file_name,
-    plot = final_plot,
-    path = save_path,
-    width = 7.7,
-    height = 7.5,
-    units = "in",
-    dpi = 600
-  )
-  
-  message(paste(file_name, "saved in:", save_path))
+
+  # # Save file
+  # file_name <- paste0("pca_", matrix_type, ".png")
+  # ggsave(
+  #   filename = file_name,
+  #   plot = final_plot,
+  #   path = save_path,
+  #   width = 7.7,
+  #   height = 7.5,
+  #   units = "in",
+  #   dpi = 600
+  # )
+  # 
+  # message(paste(file_name, "saved in:", save_path))
   return(final_plot)
 }
 
@@ -241,20 +241,20 @@ compute_plsda <- function(df, matrix_type, save_path = "figures/01_exploratory_a
       strip.text = element_text(color = "white", face = "bold", size = rel(1))
     )
   
-  # Save file
-  file_name <- paste0("plsda_", matrix_type, ".png")
-  ggsave(
-    filename = file_name,
-    plot = final_plot,
-    path = save_path,
-    width = 7.7,
-    height = 7.5,
-    units = "in",
-    dpi = 600
-  )
-  
-  message(paste(file_name, "saved in:", save_path))
-  return(plsda_plot)
+  # # Save file
+  # file_name <- paste0("plsda_", matrix_type, ".png")
+  # ggsave(
+  #   filename = file_name,
+  #   plot = final_plot,
+  #   path = save_path,
+  #   width = 7.7,
+  #   height = 7.5,
+  #   units = "in",
+  #   dpi = 600
+  # )
+  # 
+  # message(paste(file_name, "saved in:", save_path))
+  # return(plsda_plot)
 }
 
 # 3/ Differential analysis functions -----
@@ -823,6 +823,80 @@ publication_theme <- {
     legend.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", size = rel(1)),
     legend.text = element_text(color = "black", family = "Helvetica Neue", face = "italic", size = rel(0.9))
   )
+}
+
+condition_colors <- c(
+  "dcSSc_ATAp" = "#73A9E5",
+  "dcSSc_ATAn" = "#88D0E5",
+  "lcSSc_ACA"  = "#F71735",
+  "HC"         = "#C8C6BD",
+  "NS"         = "#DADADA"
+)
+
+
+plot_dim_reduction <- function(df, save_path = "figures/01_exploratory_analysis") {
+  if (!dir.exists(save_path)) {
+    dir.create(save_path, recursive = TRUE)
+  }
+  
+  # Extract object name
+  df_name <- deparse(substitute(df))
+  matrix_type <- sub("_.*", "", df_name)
+  analysis_type <- sub(".*_", "", df_name)
+ 
+  # Extract data
+  data <- df$data
+  
+  # Build plot
+  final_plot <- ggplot(data, aes(x = x, y = y, color = group)) +
+    geom_point(size = 3) +
+    stat_ellipse(level = 0.95) +
+    scale_color_manual(values = condition_colors) +
+    labs(
+      title = paste(toupper(analysis_type), "-", matrix_type),
+      x = "Principal Component 1",
+      y = "Principal Component 2"
+    ) +
+    theme(
+      # General aspect
+      plot.background = element_rect(fill = "#FFFFFF"),
+      panel.background = element_rect(fill = "#FFFFFF"),
+      plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt"),
+      plot.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(2)),
+      plot.subtitle = element_text(color = "black", family = "Helvetica Neue", hjust = 0, size = rel(1.2)),
+      
+      # Axis
+      axis.title.x = element_text(color = "black", family = "Helvetica Neue", size = rel(1)),
+      axis.text.x = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)),
+      axis.title.y = element_text(color = "black", family = "Helvetica Neue", size = rel(1)),
+      axis.text.y = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)),
+      axis.line = element_line(color = "#5f5f5f", linewidth = 0.25),
+      axis.ticks = element_line(color = "black", linewidth = 0.25),
+      panel.grid.major = element_line(color = "#EAEAEA", linetype = "dotted", linewidth = 0.25),
+      
+      # Legend
+      legend.box.margin = margin(0.1, 0.1, 0.1, 0.1),
+      legend.position = "bottom",
+      legend.background = element_rect(fill = "#FFFFFF", color = "#5f5f5f", linewidth = 0.1),
+      legend.key.size = unit(0.5, "cm"),
+      legend.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", size = rel(1)),
+      legend.text = element_text(color = "black", family = "Helvetica Neue", face = "italic", size = rel(0.9))
+    )
+  
+  # Save plot
+  file_name <- paste0(matrix_type,"_",analysis_type, ".png")
+  ggsave(
+    filename = file_name,
+    plot = final_plot,
+    path = save_path,
+    width = 7.7,
+    height = 7.5,
+    units = "in",
+    dpi = 600
+  )
+  
+  message(paste(file_name, "saved in:", save_path))
+  return(final_plot)
 }
 
 create_heatmap <- function(matrix, matrix_type, save_path = "figures/01_exploratory_analysis") {

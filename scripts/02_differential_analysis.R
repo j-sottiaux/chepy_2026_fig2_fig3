@@ -73,11 +73,18 @@ nucleus_groups <- c(
 
 ### 2/ Exploratory analysis / PCA, PLS-DA & heatmap clustering ----
 
-compute_pca(df = cytoplasm_df, matrix_type = "cytoplasm")
-compute_pca(df = nucleus_df, matrix_type = "nucleus")
+# PCA
+cytoplasm_pca <- compute_pca(df = cytoplasm_df, matrix_type = "cytoplasm")
+plot_dim_reduction(cytoplasm_pca)
 
-compute_plsda(df = cytoplasm_df, matrix_type = "cytoplasm")
-compute_plsda(df = nucleus_df, matrix_type = "nucleus")
+nucleus_pca <-  compute_pca(df = nucleus_df, matrix_type = "nucleus")
+plot_dim_reduction(nucleus_pca)
+
+cytoplasm_plsda <-  compute_plsda(df = cytoplasm_df, matrix_type = "cytoplasm")
+plot_dim_reduction(cytoplasm_plsda)
+
+nucleus_plsda <- compute_plsda(df = nucleus_df, matrix_type = "nucleus")
+plot_dim_reduction(nucleus_plsda)
 
 create_heatmap(matrix = cytoplasm_matrix, matrix_type = "cytoplasm")
 create_heatmap(matrix = nucleus_matrix, matrix_type = "nucleus")
