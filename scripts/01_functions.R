@@ -884,7 +884,7 @@ plot_dim_reduction <- function(df, save_path = "figures/01_exploratory_analysis"
     )
   
   # Save plot
-  file_name <- paste0(matrix_type,"_",analysis_type, ".png")
+  file_name <- paste0(matrix_type,"_",analysis_type, ".tiff")
   ggsave(
     filename = file_name,
     plot = final_plot,
@@ -892,7 +892,8 @@ plot_dim_reduction <- function(df, save_path = "figures/01_exploratory_analysis"
     width = 7.7,
     height = 7.5,
     units = "in",
-    dpi = 600
+    dpi = 600,
+    device = "tiff"
   )
   
   message(paste(file_name, "saved in:", save_path))
@@ -953,12 +954,13 @@ create_heatmap <- function(matrix, matrix_type, save_path = "figures/01_explorat
   
   # Save heatmap
   ggsave(
-    filename = paste0("heatmap_", matrix_type, ".png"),
+    filename = paste0("heatmap_", matrix_type, ".tiff"),
     plot = p$gtable,
     path = save_path,
     width = 9,
     height = 8,
-    dpi = 300
+    dpi = 600,
+    device = "tiff"
   )
   
   message("Heatmap saved at: ", file.path(save_path, paste0("heatmap_", matrix_type, ".png")))
@@ -1017,14 +1019,15 @@ create_volcano_plots <- function(toptables, save_path = "figures/02_differential
       publication_theme
     
     # Save the plot
-    file_name <- paste0("volcano_plot_", name, ".png")
+    file_name <- paste0("volcano_plot_", name, ".tiff")
     ggsave(
       filename = file_name,
       plot = volcano_df,
       path = save_path,
       width = 7.7, height = 7.5,
       units = "in",
-      dpi = 600
+      dpi = 600,
+      device = "tiff"
     )
     
     message(paste(file_name, "saved in:", save_path))
@@ -1089,7 +1092,7 @@ create_ma_plots <- function(toptables, save_path = "figures/02_differential_anal
       plot_theme
     
     # Save the plot
-    file_name <- paste0("ma_plot_", name, ".png")
+    file_name <- paste0("ma_plot_", name, ".tiff")
     ggsave(
       filename = file_name,
       plot = ma_df,
@@ -1097,7 +1100,8 @@ create_ma_plots <- function(toptables, save_path = "figures/02_differential_anal
       width = 7.7,
       height = 7.5,
       units = "in",
-      dpi = 600
+      dpi = 600,
+      device = "tiff"
     )
     
     message(paste(file_name, "saved in:", save_path))
@@ -1182,7 +1186,7 @@ create_gsea_lpop_charts <- function(gsea_results, save_path = "figures/03_gsea_l
           panel.grid.major = element_line(color = "#F0F0F0", linetype = "solid", linewidth = 0.25),
         )
       
-      file_name <- paste0("gsea_lpop_chart_", db_name, "_", condition_name, ".png")
+      file_name <- paste0("gsea_lpop_chart_", db_name, "_", condition_name, ".tiff")
       ggsave(
         filename = file_name,
         plot = lollipop_df,
@@ -1191,7 +1195,8 @@ create_gsea_lpop_charts <- function(gsea_results, save_path = "figures/03_gsea_l
         width = 18,
         height = 10,
         units = "in",
-        dpi = 600
+        dpi = 600,
+        device = "tiff"
       )
       
       message(paste(file_name, "saved in:", save_path))
@@ -1277,7 +1282,7 @@ create_ora_lpop_charts <- function(result_list, save_path = "figures/04_ora_loll
           panel.grid.major = element_line(color = "#F0F0F0", linetype = "solid", linewidth = 0.25),
         )
       
-      file_name <- paste0("ora_lpop_chart_", db_name, "_", condition_name, ".png")
+      file_name <- paste0("ora_lpop_chart_", db_name, "_", condition_name, ".tiff")
       ggsave(
         filename = file_name,
         plot = lollipop_df,
@@ -1286,7 +1291,8 @@ create_ora_lpop_charts <- function(result_list, save_path = "figures/04_ora_loll
         width = 18,
         height = 10,
         units = "in",
-        dpi = 600
+        dpi = 600,
+        device = "tiff"
       )
       
       message(paste(file_name, "saved in:", save_path))
@@ -1412,7 +1418,7 @@ create_xgsea_dotplots <- function(pathways_merged, cell_location, save_path = "f
       )
     
     # Save the file
-    file_name <- paste0("gsea_xconditions_", cell_location, "_", db_name, ".png")
+    file_name <- paste0("gsea_xconditions_", cell_location, "_", db_name, ".tiff")
     ggsave(
       filename = file_name,
       plot = dotplot,
@@ -1421,7 +1427,8 @@ create_xgsea_dotplots <- function(pathways_merged, cell_location, save_path = "f
       width = 20,
       height = 13,
       units = "in",
-      dpi = 600
+      dpi = 600,
+      device = "tiff"
     )
     
     message(paste(file_name, "saved in:", save_path))
@@ -1546,7 +1553,7 @@ create_xora_dotplots <- function(pathways_merged, cell_location, save_path = "fi
       )
     
     # Save the file
-    file_name <- paste0("gsea_xconditions_", cell_location, "_", db_name, ".png")
+    file_name <- paste0("gsea_xconditions_", cell_location, "_", db_name, ".tiff")
     ggsave(
       filename = file_name,
       plot = dotplot,
@@ -1555,7 +1562,8 @@ create_xora_dotplots <- function(pathways_merged, cell_location, save_path = "fi
       width = 20,
       height = 13,
       units = "in",
-      dpi = 600
+      dpi = 600,
+      device = "tiff"
     )
     
     message(paste(file_name, "saved in:", save_path))
@@ -1569,11 +1577,11 @@ plot_enrich_integration <- function(enrich_list, save_path = "figures/07_enrichm
   }
   
   custom_colors <- c(
-    "DNA metabolism & processing" = "#007191",
-    "RNA metabolism & processing" = "#62c8d3",
-    "Translation & ribosome biology" = "#f47a00",
-    "Immune & stress response" = "#d31f11",
-    "Other" = "#BBBBBB"
+    "DNA metabolism & processing"      = "#73A9E5",
+    "RNA metabolism & processing"      = "#E9C46A",
+    "Translation & ribosome biology"   = "#2A9D8F",
+    "Immune & stress response"         = "#F4A261",
+    "Other"                            = "#8D99AE"
   )
   
   lapply(names(enrich_list), function(integration_df) {
@@ -1623,36 +1631,62 @@ plot_enrich_integration <- function(enrich_list, save_path = "figures/07_enrichm
         color = "Pathway Category"
       ) +
       theme(
-        plot.background = element_rect(fill = "#F0F0F0"),
+        # General aspect of the plot
+        plot.background = element_rect(fill = "#FFFFFF"),
         panel.background = element_rect(fill = "#FFFFFF"),
-        plot.margin = margin(20, 20, 20, 20, unit = "pt"),
-        plot.title = element_text(color = "#304852", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(2)),
-        plot.subtitle = element_text(color = "#304852", family = "Helvetica Neue", hjust = 0, size = rel(1.3)),
-        axis.title.x = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(1), hjust = 0.5),
-        axis.text.x = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(1), hjust = 0.5),
-        axis.title.y = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(1), hjust = 0.5),
-        axis.text.y = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(0.9)),
-        axis.line = element_line(color = "#DADADA", linewidth = 0.25),
-        axis.ticks = element_line(color = "#36595F", linewidth = 0.25),
-        panel.grid.major = element_line(color = "#F0F0F0", linewidth = 0.25),
-        strip.background = element_rect(fill = "#36595F"),
-        strip.text = element_text(size = 12, face = "bold", color = "#FFFFFF"),
-        legend.position = "top",
+        plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt"),
+        plot.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(2)),
+        plot.subtitle = element_text(color = "black", family = "Helvetica Neue", hjust = 0, size = rel(1.2)),
+        
+        # Axis titles and texts
+        axis.title.x = element_text(color = "black", family = "Helvetica Neue", size = rel(1)),
+        axis.text.x = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9), angle = 0, hjust = 0.5),
+        axis.title.y = element_text(color = "black", family = "Helvetica Neue", size = rel(1)), ,
+        axis.text.y = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9), angle = 0, hjust = 0.5),
+        axis.line = element_line(color = "#5f5f5f", linetype = "solid", linewidth = 0.25),
+        axis.ticks = element_line(color = "black", linetype = "solid", linewidth = 0.25),
+        panel.grid.major = element_line(color = "#EAEAEA", linetype = "dotted", linewidth = 0.25),
+        
+        # Legend
         legend.box.margin = margin(0.1, 0.1, 0.1, 0.1),
-        legend.background = element_rect(fill = "#FFFFFF", color = "#b0b0b0", linewidth = 0.2),
+        legend.position = "bottom",
+        legend.background = element_rect(fill = "#FFFFFF", color = "#5f5f5f", linewidth = 0.1, linetype = "solid"),
         legend.key.size = unit(0.5, "cm"),
-        legend.title = element_text(color = "#36595F", family = "Helvetica Neue", face = "bold", size = rel(1)),
-        legend.text = element_text(color = "#36595F", family = "Helvetica Neue", face = "italic", size = rel(0.9))
+        legend.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", size = rel(1)),
+        legend.text = element_text(color = "black", family = "Helvetica Neue", face = "italic", size = rel(0.9))
       )
+      # theme(
+      #   plot.background = element_rect(fill = "#F0F0F0"),
+      #   panel.background = element_rect(fill = "#FFFFFF"),
+      #   plot.margin = margin(20, 20, 20, 20, unit = "pt"),
+      #   plot.title = element_text(color = "#304852", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(2)),
+      #   plot.subtitle = element_text(color = "#304852", family = "Helvetica Neue", hjust = 0, size = rel(1.3)),
+      #   axis.title.x = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(1), hjust = 0.5),
+      #   axis.text.x = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(1), hjust = 0.5),
+      #   axis.title.y = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(1), hjust = 0.5),
+      #   axis.text.y = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(0.9)),
+      #   axis.line = element_line(color = "#DADADA", linewidth = 0.25),
+      #   axis.ticks = element_line(color = "#36595F", linewidth = 0.25),
+      #   panel.grid.major = element_line(color = "#F0F0F0", linewidth = 0.25),
+      #   strip.background = element_rect(fill = "#36595F"),
+      #   strip.text = element_text(size = 12, face = "bold", color = "#FFFFFF"),
+      #   legend.position = "top",
+      #   legend.box.margin = margin(0.1, 0.1, 0.1, 0.1),
+      #   legend.background = element_rect(fill = "#FFFFFF", color = "#b0b0b0", linewidth = 0.2),
+      #   legend.key.size = unit(0.5, "cm"),
+      #   legend.title = element_text(color = "#36595F", family = "Helvetica Neue", face = "bold", size = rel(1)),
+      #   legend.text = element_text(color = "#36595F", family = "Helvetica Neue", face = "italic", size = rel(0.9))
+      # )
     
-    file_name <- paste0(integration_df, "_enrich_integration_plot.png")
+    file_name <- paste0(integration_df, "_enrich_integration_plot.tiff")
     ggsave(
       filename = file_name,
       plot = enrichplot,
       path = save_path,
       width = 12, height = 9,
       units = "in",
-      dpi = 600
+      dpi = 600,
+      device = "tiff"
     )
     
     message(paste("saved:", file_name))
