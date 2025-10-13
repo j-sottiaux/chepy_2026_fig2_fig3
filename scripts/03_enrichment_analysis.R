@@ -44,17 +44,15 @@ print(raw_gmt)
 
 # Import & process reference bg genes
 ref_proteome <- lapply(raw_gmt, clean_gmt)
-names(ref_proteome) <- gsub("_v2024_1_hs_symbols", "", tools::file_path_sans_ext(basename(raw_gmt)))
+names(ref_proteome) <- gsub("_v2025_1_hs_symbols", "", tools::file_path_sans_ext(basename(raw_gmt)))
 
 
 # 2/ ORA data pre-processing -----
-
 ora_genelist <- clean_toptables_for_ora(toptables)
 names(ora_genelist) <- gsub("_HC", "", tools::file_path_sans_ext(basename(toptables_path)))
 
 
 # Import & process experiment bg genes
-
 # Import & process whole cell proteome from evapass 2022
 evapass_df <- as.data.frame(raw_matrix$evapass_matrix)
 evapass_df <- clean_evapass(evapass_df)
@@ -68,7 +66,7 @@ xp_filter <- unique(unlist(list(
 
 # Create xp bg genes by "xp-filtering" gobp & reactome db
 xp_proteome <- filter_xp_proteome(ref_proteome)
-names(xp_proteome) <- gsub("_v2024_1_hs_symbols", "", tools::file_path_sans_ext(basename(raw_gmt)))
+names(xp_proteome) <- gsub("_v2025_1_hs_symbols", "", tools::file_path_sans_ext(basename(raw_gmt)))
 
 # 3/ Running enrichment analyses -----
 

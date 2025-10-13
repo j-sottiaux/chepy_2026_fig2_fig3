@@ -19,7 +19,7 @@
 
 # Reproducibility check
 gc()
-set.seed(12345)
+set.seed(12345) 
 
 # Source functions
 source(file = "scripts/01_functions.R")

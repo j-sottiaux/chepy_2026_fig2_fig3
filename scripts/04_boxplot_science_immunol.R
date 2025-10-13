@@ -22,7 +22,7 @@ if (!dir.exists(save_path)) {
 
 
 # Select the protein to be plotted here
-gene_of_interest <- "HLA-A" 
+gene_of_interest <- "FCGRT" 
 
 # Function to extract and reshape for one dataset
 extract_gene_data <- function(df, gene, source_name) {
@@ -131,6 +131,8 @@ lfq_boxplot <- ggplot(plot_data, aes(x = Condition, y = LFQ, fill = Condition, c
     legend.text = element_text(color = "black", family = "Helvetica Neue", face = "italic", size = rel(0.9))
   )
 
+lfq_boxplot
+
 
 # Save the plot and ensure the name matches the shape 
 file_name <- paste0("violin_plot_lfq_intensities_", gene_of_interest, ".tiff")
@@ -143,4 +145,3 @@ ggsave(
   dpi = 600,
   device = "tiff"
 )
-
