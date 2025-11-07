@@ -3,14 +3,16 @@
 # Load required libraries
 {
   # for the FCS analysis
-  
+
   library(tidyverse)
   library(writexl)
   library(data.table)
-  
+
   library(ggplot2)
   library(ggrepel)
-  
+  library(stringr)
+  library(grid)
+
   library(clusterProfiler)
 }
 

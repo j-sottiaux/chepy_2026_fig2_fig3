@@ -5,11 +5,11 @@
   library(data.table)
   library(readxl)
   library(writexl)
-  
+
   library(tidyverse)
   library(ggrepel)
   library(ggthemes)
-  
+
   library(mixOmics)
   library(limma)
   library(ashr)
@@ -19,7 +19,7 @@
 
 # Reproducibility check
 gc()
-set.seed(12345) 
+set.seed(12345)
 
 # Source functions
 source(file = "scripts/01_functions.R")
@@ -77,10 +77,10 @@ nucleus_groups <- c(
 cytoplasm_pca <- compute_pca(df = cytoplasm_df, matrix_type = "cytoplasm")
 plot_dim_reduction(cytoplasm_pca)
 
-nucleus_pca <-  compute_pca(df = nucleus_df, matrix_type = "nucleus")
+nucleus_pca <- compute_pca(df = nucleus_df, matrix_type = "nucleus")
 plot_dim_reduction(nucleus_pca)
 
-cytoplasm_plsda <-  compute_plsda(df = cytoplasm_df, matrix_type = "cytoplasm")
+cytoplasm_plsda <- compute_plsda(df = cytoplasm_df, matrix_type = "cytoplasm")
 plot_dim_reduction(cytoplasm_plsda)
 
 nucleus_plsda <- compute_plsda(df = nucleus_df, matrix_type = "nucleus")
