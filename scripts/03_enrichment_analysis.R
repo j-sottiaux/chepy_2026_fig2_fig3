@@ -1,9 +1,5 @@
-# Project setup  -----
-
 # Load required libraries
 {
-  # for the FCS analysis
-
   library(tidyverse)
   library(writexl)
   library(data.table)
@@ -21,7 +17,7 @@ gc()
 set.seed(12345)
 
 # Source functions
-source(file = "scripts/01_functions.R")
+source(file = "scripts/00_functions.R")
 
 # significance & filtering thresholds
 padj_threshold <- 0.05
@@ -101,19 +97,5 @@ enrich_integration <- integrate_gsea_ora_results(gsea_results, ora_results)
 ## d/ Data pre-processing for "Master volcano plot" ----
 master_enrich_data <- create_enrichment_master_data(gsea_results, ora_results)
 
-# 4/ Data visualization -----
-
-## a/ Per condition lollipop charts ----
-create_gsea_lpop_charts(gsea_results_filtered)
-create_ora_lpop_charts(ora_results_filtered)
-
-## b/ Cross-conditions scatter dotplots ----
-
-create_xgsea_dotplots(pathways_merged = gsea_pathways_merged, cell_location = "cytoplasm")
-create_xgsea_dotplots(pathways_merged = gsea_pathways_merged, cell_location = "nucleus")
-
-create_xora_dotplots(pathways_merged = ora_pathways_merged, cell_location = "cytoplasm")
-create_xora_dotplots(pathways_merged = ora_pathways_merged, cell_location = "nucleus")
-
-## c/ Enrichments integration  plots ----
+# 4/ Enrichments integration data visualization -----
 plot_enrich_integration(enrich_integration)

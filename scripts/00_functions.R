@@ -167,19 +167,6 @@ compute_pca <- function(df, matrix_type, save_path = "figures/01_exploratory_ana
       strip.text = element_text(color = "white", face = "bold", size = rel(1))
     )
 
-  # # Save file
-  # file_name <- paste0("pca_", matrix_type, ".png")
-  # ggsave(
-  #   filename = file_name,
-  #   plot = final_plot,
-  #   path = save_path,
-  #   width = 7.7,
-  #   height = 7.5,
-  #   units = "in",
-  #   dpi = 600
-  # )
-  #
-  # message(paste(file_name, "saved in:", save_path))
   return(final_plot)
 }
 
@@ -590,7 +577,6 @@ filter_ora_results <- function(result_list, save_path = "data/05_ora_results_fil
   return(res_filtered)
 }
 
-
 # d/ combining analyses ----
 merge_enrichment_results <- function(result_list, enrich_type, save_path = "data/06_enrichment_results_merged") {
   if (!dir.exists(save_path)) {
@@ -626,7 +612,7 @@ merge_enrichment_results <- function(result_list, enrich_type, save_path = "data
       merged_results[[db_name]] <- merged_df
 
       # Write to Excel
-      file_name <- file.path(save_path, paste0(enrich_type, db_name, "_results_merged.xlsx"))
+      file_name <- file.path(save_path, paste0(enrich_type, "_", db_name, "_results_merged.xlsx"))
       writexl::write_xlsx(merged_df, file_name)
       message("✅ Saved: ", file_name)
     } else {
@@ -907,72 +893,6 @@ plot_dim_reduction <- function(df, save_path = "figures/01_exploratory_analysis"
   return(final_plot)
 }
 
-create_heatmap <- function(matrix, matrix_type, save_path = "figures/01_exploratory_analysis") {
-  if (!dir.exists(save_path)) {
-    dir.create(save_path, recursive = TRUE)
-  }
-
-  matrix_type <- tolower(matrix_type)
-  if (!(matrix_type %in% c("cytoplasm", "nucleus"))) {
-    stop("Error: 'matrix_type' must be either 'cytoplasm' or 'nucleus'.")
-  }
-
-  if (matrix_type == "cytoplasm") {
-    NS <- cytoNS
-    ATAp <- cytoATAp
-  } else if (matrix_type == "nucleus") {
-    NS <- nuclNS
-    ATAp <- nuclATAp
-  }
-
-  # Build group labels
-  group <- c(
-    rep("dcSSc_ATAp", length(ATAp)),
-    rep("dcSSc_ATAn", length(ATAn)),
-    rep("lcSSc_ACA", length(ACA)),
-    rep("HC", length(HC)),
-    rep("NS", length(NS))
-  )
-
-  # Create unique names per sample
-  group_labels <- unlist(lapply(split(seq_along(group), group), function(indices) {
-    group_name <- group[indices[1]]
-    paste0(group_name, "_", seq_along(indices))
-  }))
-
-  # Assign new colnames to matrix
-  colnames(matrix) <- group_labels
-
-  # Create heatmap
-  p <- pheatmap(matrix,
-    fontsize = 5,
-    angle_col = 45,
-    color = viridis::viridis(100),
-    cutree_cols = 3,
-    cutree_rows = 2,
-    cluster_rows = TRUE,
-    cluster_cols = TRUE,
-    clustering_distance_cols = "euclidean",
-    clustering_method = "ward.D2",
-    show_rownames = FALSE,
-    show_colnames = TRUE,
-    main = paste("Samples clustering Heatmap for cellular compartment :", matrix_type)
-  )
-
-  # Save heatmap
-  ggsave(
-    filename = paste0("heatmap_", matrix_type, ".tiff"),
-    plot = p$gtable,
-    path = save_path,
-    width = 9,
-    height = 8,
-    dpi = 600,
-    device = "tiff"
-  )
-
-  message("Heatmap saved at: ", file.path(save_path, paste0("heatmap_", matrix_type, ".png")))
-}
-
 create_volcano_plots <- function(toptables, save_path = "figures/02_differential_analysis") {
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
@@ -1042,550 +962,13 @@ create_volcano_plots <- function(toptables, save_path = "figures/02_differential
   })
 }
 
-create_ma_plots <- function(toptables, save_path = "figures/02_differential_analysis") {
-  if (!dir.exists(save_path)) {
-    dir.create(save_path, recursive = TRUE)
-  }
-
-  lapply(names(toptables), function(name) {
-    df <- toptables[[name]] # Extract each top table as a data frame
-
-    # Create significance cutoff
-    df$significant <- ifelse(df$adj.P.Val < padj_volcano_cutoff, "yes", "no")
-
-
-    # Create differential expression cutoffs
-    df$diffexpressed <- "no"
-    df$diffexpressed[df$logFC_shrunk > logFC_volcano_cutoff & df$adj.P.Val < padj_volcano_cutoff] <- "up"
-    df$diffexpressed[df$logFC_shrunk < -logFC_volcano_cutoff & df$adj.P.Val < padj_volcano_cutoff] <- "down"
-
-
-    # Select the top 20 genes
-    df_sorted <- df[order(-abs(df$logFC_shrunk)), ]
-    df_top20 <- df_sorted$gene_id[1:20]
-
-    # Label top genes
-    df$gene_label <- ifelse(df$gene_id %in% df_top20 & df$diffexpressed != "no",
-      df$gene_id,
-      NA
-    )
-
-    # Generate the ma plot
-    ma_df <- ggplot(df, aes(x = log(AveExpr), y = logFC_shrunk, color = significant, label = gene_label)) +
-      geom_point(size = 0.9, alpha = 0.4) +
-      geom_hline(yintercept = c(-logFC_volcano_cutoff, logFC_volcano_cutoff), col = "#dd9d6b", linetype = "dashed") +
-      geom_label_repel(
-        aes(label = gene_label),
-        size = 3,
-        box.padding = 0.25,
-        segment.color = "#d7d7d7",
-        max.overlaps = Inf,
-        show.legend = FALSE
-      ) +
-      scale_color_manual(
-        name = "Significant change",
-        values = c("no" = "#dcdbc8", "yes" = "#dd9d6b"),
-        labels = c("No", "Yes")
-      ) +
-      coord_cartesian(ylim = c(-8, 8), range(log(df$AveExpr), na.rm = TRUE)) +
-      scale_x_continuous(breaks = seq(3, 4, 0.2)) +
-      scale_y_continuous(breaks = seq(-8, 8, 2)) +
-      labs(
-        title = paste("MA plot /", name),
-        subtitle = "Differential abundance of proteins (labeled as gene name)",
-        x = "log Average Expression",
-        y = "Shrunk log FC (ashr)"
-      ) +
-      plot_theme
-
-    # Save the plot
-    file_name <- paste0("ma_plot_", name, ".tiff")
-    ggsave(
-      filename = file_name,
-      plot = ma_df,
-      path = save_path,
-      width = 7.7,
-      height = 7.5,
-      units = "in",
-      dpi = 600,
-      device = "tiff"
-    )
-
-    message(paste(file_name, "saved in:", save_path))
-    return(ma_df)
-  })
-}
-
-create_gsea_lpop_charts <- function(gsea_results, save_path = "figures/03_gsea_lollipop_charts") {
-  if (!dir.exists(save_path)) {
-    dir.create(save_path, recursive = TRUE)
-  }
-
-  lapply(names(gsea_results), function(db_name) {
-    db_data <- gsea_results[[db_name]]
-
-    lapply(names(db_data), function(condition_name) {
-      df <- db_data[[condition_name]]
-
-      if (is.null(df) || nrow(df) == 0) {
-        message(paste("Skipping", db_name, condition_name, "- empty dataframe"))
-        return(NULL)
-      }
-
-      # Select top 30 pathways (balanced positive & negative)
-      top_pos <- df %>%
-        filter(NES > 0) %>%
-        arrange(desc(NES)) %>%
-        head(30)
-
-      top_neg <- df %>%
-        filter(NES < 0) %>%
-        arrange(NES) %>%
-        head(30)
-
-      combined <- if (nrow(top_pos) + nrow(top_neg) > 30) {
-        bind_rows(top_pos, top_neg) %>%
-          arrange(desc(abs(NES))) %>%
-          head(30)
-      } else {
-        bind_rows(top_pos, top_neg)
-      }
-
-      if (nrow(combined) == 0) {
-        message(paste("Skipping", db_name, condition_name, "- no enriched pathways found"))
-        return(NULL)
-      }
-
-      n_display <- nrow(combined)
-      n_total <- nrow(df)
-
-      # Plot
-      lollipop_df <- ggplot(combined, aes(x = NES, y = fct_reorder(Description, NES))) +
-        geom_segment(aes(x = 0, xend = NES, y = Description, yend = Description),
-          color = "#36595F", size = 0.3, linetype = "dashed"
-        ) +
-        geom_point(aes(color = p.adjust, size = setSize)) +
-        geom_vline(xintercept = 0, linetype = "solid", color = "#36595F", linewidth = 0.3) +
-        scale_color_gradientn(
-          colours = c("#604838", "#EB8A3E", "#EBB582"),
-          guide = guide_colorbar(reverse = FALSE)
-        ) +
-        scale_size_continuous(range = c(2, 8)) +
-        scale_x_continuous(expand = expansion(mult = 0.05)) +
-        labs(
-          title = paste("Top", n_display, "out of", n_total, "enriched pathways /", condition_name, "vs.", db_name),
-          subtitle = "GSEA conducted with : padj cutoff = 0.05 (BH corr.) | 15 < Genes setSize < 300 | Permutations = 50k",
-          x = "Normalized Enrichment Score • NES",
-          y = NULL
-        ) +
-        theme(
-          plot.background = element_rect(fill = "#F0F0F0"),
-          panel.background = element_rect(fill = "#FFFFFF"),
-          plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt"),
-          plot.title = element_text(color = "#304852", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(1.6)),
-          plot.subtitle = ggtext::element_markdown(color = "#304852", family = "Helvetica Neue", hjust = 0, size = rel(1.2)),
-          axis.title.x = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(1)),
-          axis.text.x = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(0.9), angle = 0, hjust = 0.5),
-          axis.title.y = ggtext::element_markdown(family = "Helvetica Neue", size = rel(1)),
-          axis.text.y = element_text(color = "#36595F", family = "Helvetica Neue", face = "italic", size = rel(0.9), angle = 0, hjust = 1),
-          axis.line = element_line(color = "#DADADA", linetype = "solid", linewidth = 0.25),
-          axis.ticks = element_line(color = "#36595F", linetype = "solid", linewidth = 0.25),
-          panel.grid.major = element_line(color = "#F0F0F0", linetype = "solid", linewidth = 0.25),
-        )
-
-      file_name <- paste0("gsea_lpop_chart_", db_name, "_", condition_name, ".tiff")
-      ggsave(
-        filename = file_name,
-        plot = lollipop_df,
-        path = save_path,
-        scale = 0.8,
-        width = 18,
-        height = 10,
-        units = "in",
-        dpi = 600,
-        device = "tiff"
-      )
-
-      message(paste(file_name, "saved in:", save_path))
-      return(lollipop_df)
-    })
-  })
-}
-
-create_ora_lpop_charts <- function(result_list, save_path = "figures/04_ora_lollipop_charts") {
-  if (!dir.exists(save_path)) {
-    dir.create(save_path, recursive = TRUE)
-  }
-
-  lapply(names(result_list), function(db_name) {
-    db_data <- result_list[[db_name]]
-
-    lapply(names(db_data), function(condition_name) {
-      df <- db_data[[condition_name]]
-
-      if (is.null(df) || nrow(df) == 0) {
-        message(paste("Skipping", db_name, condition_name, "- empty dataframe"))
-        return(NULL)
-      }
-
-      # Select top 30 pathways (balanced positive & negative)
-      top_pos <- df %>%
-        filter(FoldEnrichment > 0) %>%
-        arrange(desc(FoldEnrichment)) %>%
-        head(30)
-
-      top_neg <- df %>%
-        filter(FoldEnrichment < 0) %>%
-        arrange(FoldEnrichment) %>%
-        head(30)
-
-      combined <- if (nrow(top_pos) + nrow(top_neg) > 30) {
-        bind_rows(top_pos, top_neg) %>%
-          arrange(desc(abs(FoldEnrichment))) %>%
-          head(30)
-      } else {
-        bind_rows(top_pos, top_neg)
-      }
-
-      if (nrow(combined) == 0) {
-        message(paste("Skipping", db_name, condition_name, "- no enriched pathways found"))
-        return(NULL)
-      }
-
-      n_display <- nrow(combined)
-      n_total <- nrow(df)
-
-      # Plot
-      lollipop_df <- ggplot(combined, aes(x = FoldEnrichment, y = fct_reorder(Description, FoldEnrichment))) +
-        geom_segment(aes(x = 0, xend = FoldEnrichment, y = Description, yend = Description),
-          color = "#36595F", size = 0.3, linetype = "dashed"
-        ) +
-        geom_point(aes(color = p.adjust, size = Count)) +
-        geom_vline(xintercept = 0, linetype = "solid", color = "#36595F", linewidth = 0.3) +
-        scale_color_gradientn(
-          colours = c("#604838", "#EB8A3E", "#EBB582"),
-          guide = guide_colorbar(reverse = FALSE)
-        ) +
-        scale_size_continuous(range = c(2, 8)) +
-        scale_x_continuous(expand = expansion(mult = 0.05)) +
-        labs(
-          title = paste("Top", n_display, "out of", n_total, "enriched pathways /", condition_name, "vs.", db_name),
-          subtitle = "ORA conducted with : padj cutoff = 0.05 (BH corr.) | 15 < Genes setSize < 300",
-          x = "Fold Enrichment",
-          y = NULL
-        ) +
-        theme(
-          plot.background = element_rect(fill = "#F0F0F0"),
-          panel.background = element_rect(fill = "#FFFFFF"),
-          plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt"),
-          plot.title = element_text(color = "#304852", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(1.8)),
-          plot.subtitle = element_text(color = "#304852", family = "Helvetica Neue", hjust = 0, size = rel(1.2)),
-          axis.title.x = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(1)),
-          axis.text.x = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(0.9), angle = 0, hjust = 0.5),
-          axis.title.y = element_text(family = "Helvetica Neue", size = rel(1)),
-          axis.text.y = element_text(color = "#36595F", family = "Helvetica Neue", face = "italic", size = rel(0.9), angle = 0, hjust = 1),
-          axis.line = element_line(color = "#DADADA", linetype = "solid", linewidth = 0.25),
-          axis.ticks = element_line(color = "#36595F", linetype = "solid", linewidth = 0.25),
-          panel.grid.major = element_line(color = "#F0F0F0", linetype = "solid", linewidth = 0.25),
-        )
-
-      file_name <- paste0("ora_lpop_chart_", db_name, "_", condition_name, ".tiff")
-      ggsave(
-        filename = file_name,
-        plot = lollipop_df,
-        path = save_path,
-        scale = 0.8,
-        width = 18,
-        height = 10,
-        units = "in",
-        dpi = 600,
-        device = "tiff"
-      )
-
-      message(paste(file_name, "saved in:", save_path))
-      return(lollipop_df)
-    })
-  })
-}
-
-create_xgsea_dotplots <- function(pathways_merged, cell_location, save_path = "figures/05_xgsea_dotplots") {
-  if (!dir.exists(save_path)) dir.create(save_path, recursive = TRUE)
-
-  if (!(cell_location %in% c("cytoplasm", "nucleus"))) {
-    stop("Error: 'location' must be either 'cytoplasm' or 'nucleus'.")
-  }
-
-  if (cell_location == "cytoplasm") {
-    compartment <- "cytoplasm"
-  } else if (cell_location == "nucleus") {
-    compartment <- "nucleus"
-  }
-
-  # Loop over databases
-  lapply(names(pathways_merged), function(db_name) {
-    df <- as.data.frame(pathways_merged[[db_name]])
-
-    # Extract location and filter
-    df <- df %>%
-      mutate(
-        location = case_when(
-          grepl("nucleus", source, ignore.case = TRUE) ~ "nucleus",
-          grepl("cytoplasm", source, ignore.case = TRUE) ~ "cytoplasm",
-          TRUE ~ NA_character_
-        )
-      )
-
-    df$location <- factor(df$location, levels = c("nucleus", "cytoplasm"))
-    df <- df %>% filter(location == compartment)
-
-    df$source <- stringr::str_extract(df$source, "lcSSc_ACA|dcSSc_ATAn|dcSSc_ATAp|NS")
-
-    # Select top 100 pathways (balanced positive & negative)
-    top_pos <- df %>%
-      filter(NES > 0) %>%
-      arrange(desc(NES)) %>%
-      head(100)
-
-    top_neg <- df %>%
-      filter(NES < 0) %>%
-      arrange(NES) %>%
-      head(100)
-
-    combined_df <- if (nrow(top_pos) + nrow(top_neg) > 100) {
-      bind_rows(top_pos, top_neg) %>%
-        arrange(desc(abs(NES))) %>%
-        head(100)
-    } else {
-      bind_rows(top_pos, top_neg)
-    }
-
-    if (nrow(combined_df) == 0) {
-      message(paste("Skipping", db_name, "- no enriched pathways found"))
-      return(NULL)
-    }
-
-    # Determine color scale dynamically
-    min_nes <- min(combined_df$NES, na.rm = TRUE)
-    max_nes <- max(combined_df$NES, na.rm = TRUE)
-
-    if (min_nes < 0 && max_nes > 0) {
-      # Mixed NES values – diverging viridis-friendly (red-blue approximation)
-      color_scale <- scale_color_gradient2(
-        low = "#A43820",
-        mid = "#FFEB94",
-        high = "#7CAA2D",
-        midpoint = 0,
-        guide = guide_colorbar(title = "NES", reverse = FALSE)
-      )
-    } else if (max_nes <= 0) {
-      # Only negative NES – red sequential
-      color_scale <- scale_color_gradient(
-        low = "#A43820",
-        high = "#FFEB94",
-        guide = guide_colorbar(title = "NES", reverse = FALSE)
-      )
-    } else {
-      # Only positive NES – green sequential
-      color_scale <- scale_color_gradient(
-        low = "#FFEB94",
-        high = "#7CAA2D",
-        guide = guide_colorbar(title = "NES", reverse = FALSE)
-      )
-    }
-
-    n_display <- nrow(combined_df)
-    n_total <- nrow(df)
-
-    # Build dotplot
-    dotplot <- ggplot(combined_df, aes(x = source, y = Description, color = NES)) +
-      geom_point(aes(size = setSize), alpha = 0.8) +
-      facet_grid(~location) +
-      color_scale +
-      labs(
-        title = paste("Top", n_display, "out of", n_total, "enriched pathways /", db_name),
-        subtitle = "GSEA conducted with: padj < 0.05 (BH corr.) | 15 < Genes setSize < 300 | Permutations = 50k",
-        x = NULL,
-        y = NULL
-      ) +
-      theme(
-        plot.background = element_rect(fill = "#F0F0F0"),
-        panel.background = element_rect(fill = "#FFFFFF"),
-        plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt"),
-        plot.title = element_text(color = "#304852", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(2)),
-        plot.subtitle = element_text(color = "#304852", family = "Helvetica Neue", hjust = 0, size = rel(1.3)),
-        axis.title.x = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(1), hjust = 0.5),
-        axis.text.x = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(1), hjust = 0.5),
-        axis.title.y = element_text(family = "Helvetica Neue", size = rel(1)),
-        axis.text.y = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(0.9), face = "italic", hjust = 1, margin = margin(t = 30, b = 30, r = 5, l = 5)),
-        axis.line = element_line(color = "#DADADA", linetype = "solid", linewidth = 0.25),
-        axis.ticks = element_line(color = "#36595F", linetype = "solid", linewidth = 0.25),
-        panel.grid.major = element_line(color = "#F0F0F0", linetype = "solid", linewidth = 0.25),
-        strip.background = element_rect(fill = "#36595F"),
-        strip.text = element_text(size = 12, face = "bold", color = "#FFFFFF")
-      )
-
-    # Save the file
-    file_name <- paste0("gsea_xconditions_", cell_location, "_", db_name, ".tiff")
-    ggsave(
-      filename = file_name,
-      plot = dotplot,
-      path = save_path,
-      scale = 0.8,
-      width = 20,
-      height = 13,
-      units = "in",
-      dpi = 600,
-      device = "tiff"
-    )
-
-    message(paste(file_name, "saved in:", save_path))
-    return(dotplot)
-  })
-}
-
-create_xora_dotplots <- function(pathways_merged, cell_location, save_path = "figures/06_xora_dotplots") {
-  if (!dir.exists(save_path)) dir.create(save_path, recursive = TRUE)
-
-  if (!(cell_location %in% c("cytoplasm", "nucleus"))) {
-    stop("Error: 'location' must be either 'cytoplasm' or 'nucleus'.")
-  }
-
-  if (cell_location == "cytoplasm") {
-    compartment <- "cytoplasm"
-  } else if (cell_location == "nucleus") {
-    compartment <- "nucleus"
-  }
-
-  # Loop over databases
-  lapply(names(pathways_merged), function(db_name) {
-    df <- as.data.frame(pathways_merged[[db_name]])
-
-    # Extract location and filter
-    df <- df %>%
-      mutate(
-        location = case_when(
-          grepl("nucleus", source, ignore.case = TRUE) ~ "nucleus",
-          grepl("cytoplasm", source, ignore.case = TRUE) ~ "cytoplasm",
-          TRUE ~ NA_character_
-        )
-      )
-
-    df$location <- factor(df$location, levels = c("nucleus", "cytoplasm"))
-    df <- df %>% filter(location == compartment)
-
-    df$source <- stringr::str_extract(df$source, "lcSSc_ACA|dcSSc_ATAn|dcSSc_ATAp|NS")
-
-    # Select top 100 pathways (balanced positive & negative)
-    top_pos <- df %>%
-      filter(FoldEnrichment > 0) %>%
-      arrange(desc(FoldEnrichment)) %>%
-      head(100)
-
-    top_neg <- df %>%
-      filter(FoldEnrichment < 0) %>%
-      arrange(FoldEnrichment) %>%
-      head(100)
-
-    combined_df <- if (nrow(top_pos) + nrow(top_neg) > 100) {
-      bind_rows(top_pos, top_neg) %>%
-        arrange(desc(abs(FoldEnrichment))) %>%
-        head(100)
-    } else {
-      bind_rows(top_pos, top_neg)
-    }
-
-    if (nrow(combined_df) == 0) {
-      message(paste("Skipping", db_name, "- no enriched pathways found"))
-      return(NULL)
-    }
-
-    # Determine color scale dynamically
-    min_FoldEnrichment <- min(combined_df$FoldEnrichment, na.rm = TRUE)
-    max_FoldEnrichment <- max(combined_df$FoldEnrichment, na.rm = TRUE)
-
-    if (min_FoldEnrichment < 0 && max_FoldEnrichment > 0) {
-      # Mixed FoldEnrichment values
-      color_scale <- scale_color_gradient2(
-        low = "#A43820",
-        mid = "#FFEB94",
-        high = "#7CAA2D",
-        midpoint = 0,
-        guide = guide_colorbar(title = "FoldEnrichment", reverse = FALSE)
-      )
-    } else if (max_FoldEnrichment <= 0) {
-      # Only negative FoldEnrichment – red sequential
-      color_scale <- scale_color_gradient(
-        low = "#A43820",
-        high = "#FFEB94",
-        guide = guide_colorbar(title = "FoldEnrichment", reverse = FALSE)
-      )
-    } else {
-      # Only positive FoldEnrichment – green sequential
-      color_scale <- scale_color_gradient(
-        low = "#FFEB94",
-        high = "#7CAA2D",
-        guide = guide_colorbar(title = "FoldEnrichment", reverse = FALSE)
-      )
-    }
-
-    n_display <- nrow(combined_df)
-    n_total <- nrow(df)
-
-    # Build dotplot
-    dotplot <- ggplot(combined_df, aes(x = source, y = Description, color = FoldEnrichment)) +
-      geom_point(aes(size = Count), alpha = 0.8) +
-      facet_grid(~location) +
-      color_scale +
-      labs(
-        title = paste("Top", n_display, "out of", n_total, "enriched pathways /", db_name),
-        subtitle = "ORA conducted with: padj < 0.05 (BH corr.) | 15 < Genes setSize < 300 | Permutations = 50k",
-        x = NULL,
-        y = NULL
-      ) +
-      theme(
-        plot.background = element_rect(fill = "#F0F0F0"),
-        panel.background = element_rect(fill = "#FFFFFF"),
-        plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt"),
-        plot.title = element_text(color = "#304852", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(2)),
-        plot.subtitle = element_text(color = "#304852", family = "Helvetica Neue", hjust = 0, size = rel(1.3)),
-        axis.title.x = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(1), hjust = 0.5),
-        axis.text.x = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(1), hjust = 0.5),
-        axis.title.y = element_text(family = "Helvetica Neue", size = rel(1)),
-        axis.text.y = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(0.9), face = "italic", hjust = 1, margin = margin(t = 30, b = 30, r = 5, l = 5)),
-        axis.line = element_line(color = "#DADADA", linetype = "solid", linewidth = 0.25),
-        axis.ticks = element_line(color = "#36595F", linetype = "solid", linewidth = 0.25),
-        panel.grid.major = element_line(color = "#F0F0F0", linetype = "solid", linewidth = 0.25),
-        strip.background = element_rect(fill = "#36595F"),
-        strip.text = element_text(size = 12, face = "bold", color = "#FFFFFF")
-      )
-
-    # Save the file
-    file_name <- paste0("gsea_xconditions_", cell_location, "_", db_name, ".tiff")
-    ggsave(
-      filename = file_name,
-      plot = dotplot,
-      path = save_path,
-      scale = 0.8,
-      width = 20,
-      height = 13,
-      units = "in",
-      dpi = 600,
-      device = "tiff"
-    )
-
-    message(paste(file_name, "saved in:", save_path))
-    return(dotplot)
-  })
-}
-
-plot_enrich_integration <- function(enrich_list, save_path = "figures/07_enrichments_integration") {
+plot_enrich_integration <- function(enrich_list, save_path = "figures/03_enrichments_integration") {
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
 
   lapply(names(enrich_list), function(integration_df) {
     df <- enrich_list[[integration_df]]
-
     thr <- -log10(padj_threshold)
 
     # ---- Clean up labels + compute metrics ----
@@ -1720,12 +1103,12 @@ plot_enrich_integration <- function(enrich_list, save_path = "figures/07_enrichm
   })
 }
 
-create_master_volcano <- function(enrich_category,
-                                  db_name,
-                                  cell_compartment,
-                                  condition,
-                                  pathway_description,
-                                  save_path = NULL) {
+create_shiny_volcano <- function(enrich_category,
+                                 db_name,
+                                 cell_compartment,
+                                 condition,
+                                 pathway_description,
+                                 save_path = "figures/") {
   toptable_name <- paste0(cell_compartment, "_", condition, "_HC")
   enrich_name <- paste0(db_name, "_", cell_compartment, "_", condition)
 
@@ -1779,8 +1162,8 @@ create_master_volcano <- function(enrich_category,
     text = hover_text,
     customdata = gene_id
   )) +
-    geom_point(data = toptable %>% filter(is.na(gene_label)), size = 0.2, alpha = 0.25) +
-    geom_point(data = toptable %>% filter(!is.na(gene_label)), size = 0.8, alpha = 0.8) +
+    geom_point(data = toptable %>% filter(is.na(gene_label)), size = 1, alpha = 0.20) +
+    geom_point(data = toptable %>% filter(!is.na(gene_label)), size = 2, alpha = 1) +
     geom_vline(
       xintercept = c(-logFC_volcano_cutoff, logFC_volcano_cutoff),
       col = "#dd9d6b", linetype = "dashed"
@@ -1803,7 +1186,7 @@ create_master_volcano <- function(enrich_category,
     scale_x_continuous(breaks = seq(-8, 8, 2)) +
     scale_y_continuous(breaks = seq(0, 20, 2)) +
     labs(
-      title = paste0("Volcano plot / ", cell_compartment, "_", condition, "_HC"),
+      title = paste0("Volcano plot / ", cell_compartment, " / ", condition, " vs. HC"),
       subtitle = paste0(
         "Highlighted pathway: ", pathway_description, "\n",
         db_name, " database (", toupper(enrich_category), ")"
@@ -1811,7 +1194,25 @@ create_master_volcano <- function(enrich_category,
       x = "Shrunk logFC (ashr)",
       y = "-log10 adjusted p-value"
     ) +
-    plot_theme
+    theme(
+      plot.background = element_rect(fill = "#FFFFFF"),
+      panel.background = element_rect(fill = "#FFFFFF"),
+      plot.margin = margin(5, 25, 5, 5, "pt"),
+      plot.title = element_text(family = "Helvetica Neue", face = "bold", size = rel(1.5)),
+      plot.subtitle = element_text(family = "Helvetica Neue", size = rel(1)),
+      axis.title.x = element_text(family = "Helvetica Neue", size = rel(0.8)),
+      axis.title.y = element_text(family = "Helvetica Neue", size = rel(0.8)),
+      axis.text.x = element_text(family = "Helvetica Neue", size = rel(0.6)),
+      axis.text.y = element_text(family = "Helvetica Neue", size = rel(0.6)),
+      axis.line = element_line(color = "grey35", linetype = "solid", linewidth = 0.25),
+      panel.grid.major = element_line(color = "#F0F0F0", linetype = "solid", linewidth = 0.3),
+      panel.grid.minor = element_line(color = "#F0F0F0", linetype = "dotted", linewidth = 0.2),
+      legend.position = "top",
+      legend.background = element_rect(fill = "white"),
+      legend.key.size = grid::unit(0.5, "cm"),
+      legend.title = element_text(family = "Helvetica Neue", face = "bold", size = rel(0.6)),
+      legend.text = element_text(family = "Helvetica Neue", face = "italic", size = rel(0.6))
+    )
 
   # Save if path is provided
   if (!is.null(save_path)) {
@@ -1826,4 +1227,152 @@ create_master_volcano <- function(enrich_category,
   }
 
   return(volcano_plot)
+}
+
+create_shiny_enrichment <- function(enrich_category,
+                                    db_name,
+                                    cell_compartment,
+                                    condition,
+                                    pathway_description,
+                                    save_path = "figures/",
+                                    padj_threshold = 0.05) {
+  enrich_name <- paste0(db_name, "_", cell_compartment, "_", condition)
+  df <- master_enrich_data[[enrich_name]]
+  validate(need(!is.null(df), "No enrichment table found for this selection."))
+  thr <- -log10(padj_threshold)
+
+  # ---- Clean up labels + compute metrics ----
+  df <- df %>%
+    mutate(
+      logGSEA = -log10(gsea_padj + 1e-10),
+      logORA = -log10(ora_padj + 1e-10),
+      co_signif = (logGSEA > thr & logORA > thr)
+    )
+
+  label_df <- df %>%
+    filter(co_signif) %>%
+    arrange(gsea_padj + ora_padj) %>%
+    slice_head(n = 10)
+
+  xmax_val <- max(df$logGSEA, na.rm = TRUE)
+  ymax_val <- max(df$logORA, na.rm = TRUE)
+
+  x_lim <- round((xmax_val + 3))
+  y_lim <- round((ymax_val + 3))
+
+  # ---- Extract clean title components ----
+  name_parts <- strsplit(df$Description, "_", fixed = TRUE)[[1]]
+  clean_subtitle <- df
+  if (length(name_parts) == 4) {
+    db <- stringr::str_to_title(name_parts[1])
+    comp <- name_parts[2]
+    cond <- paste(name_parts[3:4], collapse = "_")
+    clean_subtitle <- paste0(toupper(db), " against ", cond, " (", comp, ")")
+  } else if (length(name_parts) == 3) {
+    db <- stringr::str_to_title(name_parts[1])
+    comp <- name_parts[2]
+    cond <- name_parts[3]
+    clean_subtitle <- paste0(toupper(db), " against ", cond, " (", comp, ")")
+  }
+
+  enrich_plot <- ggplot2::ggplot() +
+    geom_point(
+      data = subset(df, !co_signif),
+      aes(logGSEA, logORA),
+      color = "grey75", alpha = 0.35, size = 0.9, show.legend = FALSE
+    ) +
+    annotate(
+      "rect",
+      xmin = thr, xmax = x_lim, ymin = thr, ymax = y_lim,
+      fill = "grey90", color = "grey30", linetype = "dashed", linewidth = 0.4, alpha = 0.4
+    ) +
+    annotate(
+      "text",
+      x = x_lim, y = thr - 0.2, label = "co-significance area",
+      hjust = 1, size = 2.5, color = "grey30", fontface = "bold"
+    ) +
+    geom_point(
+      data = subset(df, co_signif),
+      aes(logGSEA, logORA, color = pathway_relation),
+      alpha = 0.90, size = 2
+    ) +
+    geom_label_repel(
+      data = label_df,
+      aes(
+        x = logGSEA,
+        y = logORA,
+        label = Description,
+        color = pathway_relation
+      ),
+
+      # placement controls
+      min.segment.length = 0.1,
+      force = 1,
+      force_pull = 0.01,
+      seed = 123,
+      nudge_x = (xmax_val),
+      hjust = 0.5,
+      max.overlaps = Inf,
+      direction = "y",
+
+      # visual harmony
+      point.padding = 0.15,
+      box.padding = 0.25,
+      label.padding = grid::unit(0.15, "lines"),
+      label.r = grid::unit(0.1, "lines"),
+      label.size = 0.25,
+      label.hjust = 0,
+      size = 2.5,
+      fontface = "bold",
+      family = "Helvetica Neue",
+      segment.color = "grey60",
+      segment.size = 0.20,
+      segment.curvature = 0,
+      segment.ncp = 1,
+      show.legend = FALSE
+    ) +
+    scale_color_manual(values = pathways_colors, drop = TRUE) +
+    coord_cartesian(xlim = c(0, x_lim), ylim = c(0, y_lim), clip = "off") +
+    labs(
+      title = "Enrichment analyses integration",
+      subtitle = bquote(.(clean_subtitle) ~ "/" ~ italic("top 10 co-significant pathways labeled")),
+      x = expression(-log[10]("GSEA padj")),
+      y = expression(-log[10]("ORA padj")),
+      color = "Pathway Category"
+    ) +
+    theme(
+      plot.background = element_rect(fill = "#FFFFFF"),
+      panel.background = element_rect(fill = "#FFFFFF"),
+      plot.margin = margin(5, 25, 5, 5, "pt"),
+      plot.title = element_text(family = "Helvetica Neue", face = "bold", size = rel(1.5)),
+      plot.subtitle = element_text(family = "Helvetica Neue", size = rel(1)),
+      axis.title.x = element_text(family = "Helvetica Neue", size = rel(0.8)),
+      axis.title.y = element_text(family = "Helvetica Neue", size = rel(0.8)),
+      axis.text.x = element_text(family = "Helvetica Neue", size = rel(0.6)),
+      axis.text.y = element_text(family = "Helvetica Neue", size = rel(0.6)),
+      axis.line = element_line(color = "grey35", linetype = "solid", linewidth = 0.25),
+      panel.grid.major = element_line(color = "#F0F0F0", linetype = "solid", linewidth = 0.3),
+      panel.grid.minor = element_line(color = "#F0F0F0", linetype = "dotted", linewidth = 0.2),
+      legend.position = "top",
+      legend.background = element_rect(fill = "white"),
+      legend.key.size = grid::unit(0.5, "cm"),
+      legend.title = element_text(family = "Helvetica Neue", face = "bold", size = rel(0.6)),
+      legend.text = element_text(family = "Helvetica Neue", face = "italic", size = rel(0.6))
+    )
+
+  # Save if path is provided
+  if (!is.null(save_path)) {
+    file_name <- paste0(
+      toupper(db_name), "_enrich_plot_", condition, "_",
+      str_replace_all(tolower(pathway_description), "\\s+", "_"), ".png"
+    )
+
+    ggsave(file.path(save_path, file_name),
+      plot = enrich_plot, width = 8, height = 7.8, units = "in", dpi = 600
+    )
+
+    message(paste("Plot saved at:", file.path(save_path, file_name)))
+  }
+
+  return(enrich_plot)
 }
