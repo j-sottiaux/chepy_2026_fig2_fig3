@@ -78,3 +78,10 @@ plot_dim_reduction(cytoplasm_pca)
 plot_dim_reduction(nucleus_pca)
 plot_dim_reduction(cytoplasm_plsda)
 plot_dim_reduction(nucleus_plsda)
+
+# TODO
+# ATA+ (dcSSc_ATAp)
+# ACA+ (lc_SSc_ACA)
+# ATA-/ACA- (dcSSc_ATAn)
+
+# Volcano - cytoplasm / nucleus ATA+ / top 20 gene_id labels ? + enrichment colors

@@ -16,7 +16,7 @@ set.seed(12345)
 # Source functions
 source(file = "scripts/00_functions.R")
 
-app_version <- "v1.0.0"
+app_version <- "v1.2.0"
 
 theme_codex <- bs_theme(
   version = 5,
@@ -61,8 +61,27 @@ theme_codex <- bs_theme(
     /* Tighter spacing */
     .bslib-sidebar-layout { gap: .75rem; }
 
-    /* Plot action row */
-    .plot-actions { display:flex; justify-content:flex-end; gap:.5rem; margin-top:.5rem; }
+    /* Volcano action row (top, to avoid scrolling) */
+    .plot-actions-top{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:.5rem;
+      flex-wrap:wrap;
+      margin-bottom:.5rem;
+    }
+    .plot-actions-left{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+    .plot-actions-right{ display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; }
+
+    /* Enrichment action row (TOP-LEFT) */
+    .enrich-actions-top{
+      display:flex;
+      justify-content:flex-start;
+      align-items:center;
+      gap:.5rem;
+      flex-wrap:wrap;
+      margin-bottom:.5rem;
+    }
 
     /* Scrollable main area so stacked plots remain readable */
     #mainScroll{
@@ -89,11 +108,19 @@ ui <- page_fillable(
       )
     )
   ),
+
+  # JS handler to scroll main panel to top when volcano opens
+  tags$script(HTML("
+    Shiny.addCustomMessageHandler('scrollMainTop', function(x){
+      var el = document.getElementById('mainScroll');
+      if(el) el.scrollTo({top: 0, behavior: 'smooth'});
+    });
+  ")),
   layout_sidebar(
     sidebar = sidebar(
       width = 360,
       card(
-        class = "sidebar-info", # <-- info card styling applied here
+        class = "sidebar-info",
         card_header(
           tags$div(
             tags$div(class = "sidebar-head-title", "⚙️ PARAMETERS"),
@@ -137,7 +164,7 @@ ui <- page_fillable(
     )
   ),
 
-  # Footer (version + copyright)
+  # Footer
   tags$footer(
     class = "codex-footer",
     tags$div(
@@ -226,14 +253,15 @@ server <- function(input, output, session) {
       )
     )
 
+    # Enrichment Save PNG moved to TOP-LEFT
     enrich_card <- card(
       card_header(enrich_header),
       card_body(
-        plotlyOutput("enrich_plot", height = "72vh"),
         div(
-          class = "plot-actions",
+          class = "enrich-actions-top",
           downloadButton("dl_enrich_png", "Save PNG", class = "btn btn-info btn-sm")
-        )
+        ),
+        plotlyOutput("enrich_plot", height = "72vh")
       )
     )
 
@@ -247,21 +275,24 @@ server <- function(input, output, session) {
     )
 
     volcano_body <- tagList(
+      # Volcano Save PNG at TOP-LEFT (left of Clear pathway)
       div(
-        style = "display:flex; justify-content:space-between; align-items:center; gap:.75rem; flex-wrap:wrap;",
-        actionButton("clear_pathway", "Clear pathway", class = "btn btn-warning btn-sm"),
-        uiOutput("gene_info")
+        class = "plot-actions-top",
+        div(
+          class = "plot-actions-left",
+          downloadButton("dl_volcano_png", "Save PNG", class = "btn btn-info btn-sm"),
+          actionButton("clear_pathway", "Clear pathway", class = "btn btn-warning btn-sm")
+        ),
+        div(
+          class = "plot-actions-right",
+          uiOutput("gene_info")
+        )
       ),
-      div(style = "height:.5rem;"),
-      plotlyOutput("volcano_plot", height = "72vh"),
-      div(
-        class = "plot-actions",
-        downloadButton("dl_volcano_png", "Save PNG", class = "btn btn-info btn-sm")
-      )
+      plotlyOutput("volcano_plot", height = "72vh")
     )
 
     tagList(
-      enrich_card,
+      # Volcano on top
       accordion(
         id = "volcano_acc",
         open = if (isTRUE(rv$volcano_open)) "volcano_item" else character(0),
@@ -270,7 +301,9 @@ server <- function(input, output, session) {
           value = "volcano_item",
           volcano_body
         )
-      )
+      ),
+      # Enrichment below
+      enrich_card
     )
   })
 
@@ -352,6 +385,9 @@ server <- function(input, output, session) {
     rv$gene_clicked <- NULL
     rv$volcano_open <- TRUE
 
+    # scroll to top so volcano is immediately visible
+    session$sendCustomMessage("scrollMainTop", list())
+
     rv$volcano_gg <- create_shiny_volcano(
       enrich_category     = rv$params$enrich_cat,
       db_name             = rv$params$db_name,
@@ -368,6 +404,7 @@ server <- function(input, output, session) {
     rv$gene_clicked <- NULL
     rv$volcano_gg <- NULL
     rv$volcano_open <- FALSE
+    session$sendCustomMessage("scrollMainTop", list())
   })
 
   observeEvent(input$open_genecards, {
