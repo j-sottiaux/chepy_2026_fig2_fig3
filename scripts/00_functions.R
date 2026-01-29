@@ -324,6 +324,120 @@ compute_diff_analysis <- function(df, matrix_type, save_path = "data/01_limma_to
   return(top_tables)
 }
 
+compute_extended_diff_analysis <- function(df, matrix_type, save_path = "data/09_extended_toptables/") {
+  if (!dir.exists(save_path)) {
+    dir.create(save_path, recursive = TRUE)
+  }
+
+  matrix_type <- tolower(matrix_type)
+  if (!(matrix_type %in% c("cytoplasm", "nucleus"))) {
+    stop("Error: 'matrix_type' must be either 'cytoplasm' or 'nucleus'.")
+  }
+
+  if (matrix_type == "cytoplasm") {
+    NS <- cytoNS
+    ATAp <- cytoATAp
+  } else if (matrix_type == "nucleus") {
+    NS <- nuclNS
+    ATAp <- nuclATAp
+  }
+
+  group <- factor(c(
+    rep("dcSSc_ATAp", length(ATAp)),
+    rep("dcSSc_ATAn", length(ATAn)),
+    rep("lcSSc_ACA", length(ACA)),
+    rep("HC", length(HC)),
+    rep("NS", length(NS))
+  ))
+
+  design <- model.matrix(~ -1 + group)
+  colnames(design) <- levels(group)
+
+  contrast.matrix <- makeContrasts(
+    # dc_SSc_ATAp
+    dcSSc_ATAp_dcSSc_ATAn = dcSSc_ATAp - dcSSc_ATAn,
+    dcSSc_ATAp_lcSSc_ACA = dcSSc_ATAp - lcSSc_ACA,
+    dcSSc_ATAp_HC = dcSSc_ATAp - HC,
+    dcSSc_ATAp_NS = dcSSc_ATAp - NS,
+
+    # dcSSc_ATAn
+    dcSSc_ATAn_dcSSc_ATAp = dcSSc_ATAn - dcSSc_ATAp,
+    dcSSc_ATAn_lcSSc_ACA = dcSSc_ATAn - lcSSc_ACA,
+    dcSSc_ATAn_HC = dcSSc_ATAn - HC,
+    dcSSc_ATAn_NS = dcSSc_ATAn - NS,
+
+    # lcSSc_ACA
+    lcSSc_ACA_dcSSc_ATAp = lcSSc_ACA - dcSSc_ATAp,
+    lcSSc_ACA_dcSSc_ATAn = lcSSc_ACA - dcSSc_ATAn,
+    lcSSc_ACA_HC = lcSSc_ACA - HC,
+    lcSSc_ACA_NS = lcSSc_ACA - NS,
+
+    # HC
+    HC_dcSSc_ATAp = HC - dcSSc_ATAp,
+    HC_dcSSc_ATAn = HC - dcSSc_ATAn,
+    HC_lcSSc_ACA = HC - lcSSc_ACA,
+    HC_NS = HC - NS,
+
+    # NS
+    NS_dcSSc_ATAp = NS - dcSSc_ATAp,
+    NS_dcSSc_ATAn = NS - dcSSc_ATAn,
+    NS_lcSSc_ACA = NS - lcSSc_ACA,
+    NS_HC = NS - HC,
+
+    # levels
+    levels = design
+  )
+
+  fit <- limma::lmFit(df, design)
+  fit_contrast <- limma::contrasts.fit(fit, contrast.matrix)
+  fit_ebayes <- limma::eBayes(fit_contrast)
+
+  comparisons <- c(
+    "dcSSc_ATAp_dcSSc_ATAn", "dcSSc_ATAp_lcSSc_ACA", "dcSSc_ATAp_HC",
+    "dcSSc_ATAp_NS", "dcSSc_ATAn_dcSSc_ATAp", "dcSSc_ATAn_lcSSc_ACA",
+    "dcSSc_ATAn_HC", "dcSSc_ATAn_NS", "lcSSc_ACA_dcSSc_ATAp",
+    "lcSSc_ACA_dcSSc_ATAn", "lcSSc_ACA_HC", "lcSSc_ACA_NS",
+    "HC_dcSSc_ATAp", "HC_dcSSc_ATAn", "HC_lcSSc_ACA", "HC_NS",
+    "NS_dcSSc_ATAp", "NS_dcSSc_ATAn", "NS_lcSSc_ACA", "NS_HC"
+  )
+
+  top_tables <- list()
+
+  for (comp in comparisons) {
+    tt <- limma::topTable(fit_ebayes, coef = comp, number = Inf, adjust.method = "BH", sort.by = "none")
+
+    # Only apply ashr if t and logFC exist and are finite
+    valid <- is.finite(tt$t) & is.finite(tt$logFC) & tt$t != 0
+
+    if (any(valid)) {
+      logFC <- tt$logFC[valid]
+      se_logFC <- tt$logFC[valid] / tt$t[valid]
+
+      # Adaptive shrinkage
+      ashr_fit <- ashr::ash(logFC, se_logFC)
+      tt$logFC_shrunk <- tt$logFC # default to original
+      tt$logFC_shrunk[valid] <- get_pm(ashr_fit) # Add the shrunken logFC values
+      tt$lfsr <- NA
+      tt$lfsr[valid] <- get_lfsr(ashr_fit) # Add the LFSR values from ashr
+    } else {
+      tt$logFC_shrunk <- tt$logFC
+      tt$lfsr <- NA
+    }
+
+    # Add additional columns for the shrunken logFC
+    table_to_save <- tt %>% rownames_to_column(var = "gene_id")
+
+    # Save the top table with the added shrunken logFC
+    file_name <- paste0(save_path, matrix_type, "_", comp, ".xlsx")
+    write_xlsx(table_to_save, file_name)
+
+    top_tables[[comp]] <- tt
+  }
+
+  print(paste("All top tables were saved in:", save_path))
+  return(top_tables)
+}
+
 # 4/ Enrichment functions -----
 
 # a/ pathways categorization ----
@@ -684,73 +798,102 @@ integrate_gsea_ora_results <- function(gsea_obj, ora_obj,
 }
 
 # e/ Create "Master data" for the "Master volcano plot" ----
-create_enrichment_master_data <- function(gsea_obj, ora_obj,
-                                          db_names = names(ref_proteome),
-                                          conditions = names(ora_genelist),
-                                          save_path = "data/08_master_enrichments",
-                                          save_files = TRUE) {
-  if (save_files && !dir.exists(save_path)) {
+create_enrichment_master_data <- function(
+  gsea_obj, ora_obj,
+  db_names = names(ref_proteome),
+  conditions = names(ora_genelist),
+  padj_threshold = 0.05,
+  min_genecount_cutoff = 5, # used only for an ORA significance flag (no dropping)
+  save_path = "data/08_master_enrichments",
+  save_files = TRUE
+) {
+  if (isTRUE(save_files) && !dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
 
-  # Function to process one pair of db_name and condition
-  process_pair <- function(db_name, condition) {
-    gsea_df <- gsea_obj[[db_name]][[condition]]@result %>%
-      dplyr::filter(p.adjust < padj_threshold) %>%
-      dplyr::select(Description, NES, setSize, p.adjust, core_enrichment) %>%
-      dplyr::mutate(NES = abs(NES)) %>%
-      dplyr::rename(gsea_padj = p.adjust, gsea_core_genes = core_enrichment)
-
-    ora_df <- ora_obj[[db_name]][[condition]]@result %>%
-      dplyr::filter(p.adjust < padj_threshold) %>%
-      dplyr::filter(Count >= min_genecount_cutoff) %>%
-      dplyr::select(Description, FoldEnrichment, Count, p.adjust, geneID) %>%
-      dplyr::rename(ora_padj = p.adjust, ora_core_genes = geneID)
-
-    merged_df <- full_join(gsea_df, ora_df, by = "Description") %>%
-      dplyr::rowwise() %>%
-      dplyr::mutate(shared_core_genes = paste(intersect(
-        unlist(strsplit(gsea_core_genes, "/")),
-        unlist(strsplit(ora_core_genes, "/"))
-      ), collapse = "/")) %>%
-      dplyr::mutate(n_shared_core_genes = length(intersect(
-        unlist(strsplit(gsea_core_genes, "/")),
-        unlist(strsplit(ora_core_genes, "/"))
-      ))) %>%
-      dplyr::ungroup() %>%
-      dplyr::mutate(shared_core_genes = na_if(shared_core_genes, "")) %>%
-      dplyr::mutate(pct_core_overlap = 100 * n_shared_core_genes / pmin(setSize, Count)) %>%
-      dplyr::arrange(desc(n_shared_core_genes), gsea_padj) %>%
-      dplyr::mutate(pathway_relation = categorize_pathway(Description))
+  split_genes <- function(x) {
+    x <- dplyr::coalesce(as.character(x), "")
+    out <- strsplit(x, "/", fixed = TRUE)
+    lapply(out, function(v) if (length(v) == 1 && v == "") character(0) else v)
   }
 
-  # Iterate over all combinations
+  process_pair <- function(db_name, condition) {
+    gsea_df <- gsea_obj[[db_name]][[condition]]@result %>%
+      dplyr::transmute(
+        Description     = stringr::str_squish(Description),
+        NES             = abs(NES),
+        setSize         = setSize,
+        gsea_padj       = p.adjust,
+        gsea_core_genes = core_enrichment
+      )
+
+    ora_df <- ora_obj[[db_name]][[condition]]@result %>%
+      dplyr::transmute(
+        Description     = stringr::str_squish(Description),
+        FoldEnrichment  = FoldEnrichment,
+        Count           = Count,
+        ora_padj        = p.adjust,
+        ora_core_genes  = geneID
+      )
+
+    merged_df <- dplyr::full_join(gsea_df, ora_df, by = "Description") %>%
+      dplyr::mutate(
+        # replicate enrich_integration behavior:
+        gsea_padj = dplyr::if_else(is.na(gsea_padj) & !is.na(ora_padj) & ora_padj < padj_threshold, 1, gsea_padj),
+        ora_padj = dplyr::if_else(is.na(ora_padj) & !is.na(gsea_padj) & gsea_padj < padj_threshold, 1, ora_padj),
+
+        # optional flags (do not filter rows)
+        is_sig_gsea = !is.na(gsea_padj) & gsea_padj < padj_threshold,
+        is_sig_ora = !is.na(ora_padj) & ora_padj < padj_threshold &
+          (is.na(Count) | Count >= min_genecount_cutoff),
+
+        # core gene overlap
+        gsea_list = split_genes(gsea_core_genes),
+        ora_list = split_genes(ora_core_genes),
+        shared_list = purrr::map2(gsea_list, ora_list, intersect),
+        n_shared_core_genes = purrr::map_int(shared_list, length),
+        shared_core_genes = purrr::map_chr(
+          shared_list,
+          function(v) if (length(v) == 0) NA_character_ else paste(v, collapse = "/")
+        ),
+        denom = pmin(
+          dplyr::coalesce(setSize, Count),
+          dplyr::coalesce(Count, setSize)
+        ),
+        pct_core_overlap = dplyr::if_else(denom > 0, 100 * n_shared_core_genes / denom, 0),
+        pathway_relation = categorize_pathway(Description)
+      ) %>%
+      dplyr::select(-gsea_list, -ora_list, -shared_list, -denom) %>%
+      dplyr::arrange(dplyr::desc(n_shared_core_genes), gsea_padj)
+
+    merged_df
+  }
+
   param_grid <- expand.grid(db_name = db_names, condition = conditions, stringsAsFactors = FALSE)
 
   results_list <- purrr::pmap(param_grid, function(db_name, condition) {
     tryCatch(
       {
         message("Processing: ", db_name, " / ", condition)
-        result <- process_pair(db_name, condition)
+        res <- process_pair(db_name, condition)
 
-        if (save_files) {
+        if (isTRUE(save_files)) {
           file_path <- file.path(save_path, paste0(db_name, "_", condition, "_enrichment_master_data.xlsx"))
-          writexl::write_xlsx(result, file_path)
+          writexl::write_xlsx(res, file_path)
           message("Saved: ", file_path)
         }
 
-        return(result)
+        res
       },
       error = function(e) {
-        warning("❌ Failed: ", db_name, " / ", condition, " → ", conditionMessage(e))
-        return(NULL)
+        warning("Failed: ", db_name, " / ", condition, " -> ", conditionMessage(e))
+        NULL
       }
     )
   })
 
-  # Name the results
   names(results_list) <- paste(param_grid$db_name, param_grid$condition, sep = "_")
-  return(results_list)
+  results_list
 }
 
 # 5/ Data visualization functions -----
@@ -971,7 +1114,7 @@ plot_enrich_integration <- function(enrich_list, save_path = "figures/03_enrichm
     df <- enrich_list[[integration_df]]
     thr <- -log10(padj_threshold)
 
-    # ---- Clean up labels + compute metrics ----
+    # Clean up labels + compute metrics
     df <- df %>%
       mutate(
         logGSEA = -log10(gsea_padj + 1e-10),
@@ -990,7 +1133,7 @@ plot_enrich_integration <- function(enrich_list, save_path = "figures/03_enrichm
     x_lim <- round((xmax_val + 3))
     y_lim <- round((ymax_val + 3))
 
-    # ---- Extract clean title components ----
+    # Extract clean title components
     name_parts <- strsplit(integration_df, "_", fixed = TRUE)[[1]]
     clean_subtitle <- integration_df
     if (length(name_parts) == 4) {
@@ -1103,7 +1246,7 @@ plot_enrich_integration <- function(enrich_list, save_path = "figures/03_enrichm
   })
 }
 
-create_shiny_volcano <- function(enrich_category,
+create_codex_volcano <- function(enrich_category,
                                  db_name,
                                  cell_compartment,
                                  condition,
@@ -1229,7 +1372,7 @@ create_shiny_volcano <- function(enrich_category,
   return(volcano_plot)
 }
 
-create_shiny_enrichment <- function(enrich_category,
+create_codex_enrichment <- function(enrich_category,
                                     db_name,
                                     cell_compartment,
                                     condition,
@@ -1239,83 +1382,82 @@ create_shiny_enrichment <- function(enrich_category,
   enrich_name <- paste0(db_name, "_", cell_compartment, "_", condition)
   df <- master_enrich_data[[enrich_name]]
   validate(need(!is.null(df), "No enrichment table found for this selection."))
+
   thr <- -log10(padj_threshold)
 
-  # ---- Clean up labels + compute metrics ----
+  # Clamp padj to avoid -Inf/Inf issues; keep NA as NA
+  clamp_p <- function(p) dplyr::if_else(is.na(p), NA_real_, pmax(pmin(p, 1), 1e-300))
+
   df <- df %>%
-    mutate(
-      logGSEA = -log10(gsea_padj + 1e-10),
-      logORA = -log10(ora_padj + 1e-10),
+    dplyr::mutate(
+      gsea_padj_c = clamp_p(gsea_padj),
+      ora_padj_c = clamp_p(ora_padj),
+      logGSEA = -log10(gsea_padj_c),
+      logORA = -log10(ora_padj_c),
       co_signif = (logGSEA > thr & logORA > thr)
     )
 
   label_df <- df %>%
-    filter(co_signif) %>%
-    arrange(gsea_padj + ora_padj) %>%
-    slice_head(n = 10)
+    dplyr::filter(co_signif) %>%
+    dplyr::arrange(gsea_padj + ora_padj) %>%
+    dplyr::slice_head(n = 10)
 
   xmax_val <- max(df$logGSEA, na.rm = TRUE)
   ymax_val <- max(df$logORA, na.rm = TRUE)
+  x_lim <- round(xmax_val + 3)
+  y_lim <- round(ymax_val + 3)
 
-  x_lim <- round((xmax_val + 3))
-  y_lim <- round((ymax_val + 3))
-
-  # ---- Extract clean title components ----
-  name_parts <- strsplit(df$Description, "_", fixed = TRUE)[[1]]
-  clean_subtitle <- df
-  if (length(name_parts) == 4) {
-    db <- stringr::str_to_title(name_parts[1])
+  # Subtitle should be based on enrich_name (not a pathway description)
+  name_parts <- strsplit(enrich_name, "_", fixed = TRUE)[[1]]
+  clean_subtitle <- enrich_name
+  if (length(name_parts) >= 3) {
+    db <- toupper(name_parts[1])
     comp <- name_parts[2]
-    cond <- paste(name_parts[3:4], collapse = "_")
-    clean_subtitle <- paste0(toupper(db), " against ", cond, " (", comp, ")")
-  } else if (length(name_parts) == 3) {
-    db <- stringr::str_to_title(name_parts[1])
-    comp <- name_parts[2]
-    cond <- name_parts[3]
-    clean_subtitle <- paste0(toupper(db), " against ", cond, " (", comp, ")")
+    cond <- paste(name_parts[3:length(name_parts)], collapse = "_")
+    clean_subtitle <- paste0(db, " against ", cond, " (", comp, ")")
   }
 
+  df_nonsig <- dplyr::filter(df, !co_signif)
+  df_sig <- dplyr::filter(df, co_signif)
+
   enrich_plot <- ggplot2::ggplot() +
-    geom_point(
-      data = subset(df, !co_signif),
-      aes(logGSEA, logORA),
-      color = "grey75", alpha = 0.35, size = 0.9, show.legend = FALSE
+    ggplot2::geom_point(
+      data = df_nonsig,
+      ggplot2::aes(logGSEA, logORA),
+      color = "grey50", alpha = 0.4, size = 0.9, show.legend = FALSE
     ) +
-    annotate(
+    ggplot2::annotate(
       "rect",
       xmin = thr, xmax = x_lim, ymin = thr, ymax = y_lim,
       fill = "grey90", color = "grey30", linetype = "dashed", linewidth = 0.4, alpha = 0.4
     ) +
-    annotate(
+    ggplot2::annotate(
       "text",
       x = x_lim, y = thr - 0.2, label = "co-significance area",
       hjust = 1, size = 2.5, color = "grey30", fontface = "bold"
     ) +
-    geom_point(
-      data = subset(df, co_signif),
-      aes(logGSEA, logORA, color = pathway_relation),
+    # Significant: color mapped to pathway_relation (legend comes only from this layer)
+    ggplot2::geom_point(
+      data = df_sig,
+      ggplot2::aes(logGSEA, logORA, color = pathway_relation),
       alpha = 0.90, size = 2
     ) +
-    geom_label_repel(
+    ggrepel::geom_label_repel(
       data = label_df,
-      aes(
+      ggplot2::aes(
         x = logGSEA,
         y = logORA,
         label = Description,
         color = pathway_relation
       ),
-
-      # placement controls
       min.segment.length = 0.1,
       force = 1,
       force_pull = 0.01,
       seed = 123,
-      nudge_x = (xmax_val),
+      nudge_x = xmax_val,
       hjust = 0.5,
       max.overlaps = Inf,
       direction = "y",
-
-      # visual harmony
       point.padding = 0.15,
       box.padding = 0.25,
       label.padding = grid::unit(0.15, "lines"),
@@ -1331,48 +1473,180 @@ create_shiny_enrichment <- function(enrich_category,
       segment.ncp = 1,
       show.legend = FALSE
     ) +
-    scale_color_manual(values = pathways_colors, drop = TRUE) +
-    coord_cartesian(xlim = c(0, x_lim), ylim = c(0, y_lim), clip = "off") +
-    labs(
+    ggplot2::scale_color_manual(values = pathways_colors, drop = TRUE) +
+    ggplot2::coord_cartesian(xlim = c(0, x_lim), ylim = c(0, y_lim), clip = "off") +
+    ggplot2::labs(
       title = "Enrichment analyses integration",
       subtitle = bquote(.(clean_subtitle) ~ "/" ~ italic("top 10 co-significant pathways labeled")),
       x = expression(-log[10]("GSEA padj")),
       y = expression(-log[10]("ORA padj")),
       color = "Pathway Category"
     ) +
-    theme(
-      plot.background = element_rect(fill = "#FFFFFF"),
-      panel.background = element_rect(fill = "#FFFFFF"),
-      plot.margin = margin(5, 25, 5, 5, "pt"),
-      plot.title = element_text(family = "Helvetica Neue", face = "bold", size = rel(1.5)),
-      plot.subtitle = element_text(family = "Helvetica Neue", size = rel(1)),
-      axis.title.x = element_text(family = "Helvetica Neue", size = rel(0.8)),
-      axis.title.y = element_text(family = "Helvetica Neue", size = rel(0.8)),
-      axis.text.x = element_text(family = "Helvetica Neue", size = rel(0.6)),
-      axis.text.y = element_text(family = "Helvetica Neue", size = rel(0.6)),
-      axis.line = element_line(color = "grey35", linetype = "solid", linewidth = 0.25),
-      panel.grid.major = element_line(color = "#F0F0F0", linetype = "solid", linewidth = 0.3),
-      panel.grid.minor = element_line(color = "#F0F0F0", linetype = "dotted", linewidth = 0.2),
+    ggplot2::theme(
+      plot.background = ggplot2::element_rect(fill = "#FFFFFF"),
+      panel.background = ggplot2::element_rect(fill = "#FFFFFF"),
+      plot.margin = ggplot2::margin(5, 25, 5, 5, "pt"),
+      plot.title = ggplot2::element_text(family = "Helvetica Neue", face = "bold", size = ggplot2::rel(1.5)),
+      plot.subtitle = ggplot2::element_text(family = "Helvetica Neue", size = ggplot2::rel(1)),
+      axis.title.x = ggplot2::element_text(family = "Helvetica Neue", size = ggplot2::rel(0.8)),
+      axis.title.y = ggplot2::element_text(family = "Helvetica Neue", size = ggplot2::rel(0.8)),
+      axis.text.x = ggplot2::element_text(family = "Helvetica Neue", size = ggplot2::rel(0.6)),
+      axis.text.y = ggplot2::element_text(family = "Helvetica Neue", size = ggplot2::rel(0.6)),
+      axis.line = ggplot2::element_line(color = "grey35", linetype = "solid", linewidth = 0.25),
+      panel.grid.major = ggplot2::element_line(color = "#F0F0F0", linetype = "solid", linewidth = 0.3),
+      panel.grid.minor = ggplot2::element_line(color = "#F0F0F0", linetype = "dotted", linewidth = 0.2),
       legend.position = "top",
-      legend.background = element_rect(fill = "white"),
+      legend.background = ggplot2::element_rect(fill = "white"),
       legend.key.size = grid::unit(0.5, "cm"),
-      legend.title = element_text(family = "Helvetica Neue", face = "bold", size = rel(0.6)),
-      legend.text = element_text(family = "Helvetica Neue", face = "italic", size = rel(0.6))
+      legend.title = ggplot2::element_text(family = "Helvetica Neue", face = "bold", size = ggplot2::rel(0.6)),
+      legend.text = ggplot2::element_text(family = "Helvetica Neue", face = "italic", size = ggplot2::rel(0.6))
     )
 
-  # Save if path is provided
   if (!is.null(save_path)) {
+    if (!dir.exists(save_path)) dir.create(save_path, recursive = TRUE)
+
     file_name <- paste0(
       toupper(db_name), "_enrich_plot_", condition, "_",
-      str_replace_all(tolower(pathway_description), "\\s+", "_"), ".png"
+      stringr::str_replace_all(tolower(pathway_description), "\\s+", "_"),
+      ".png"
     )
 
-    ggsave(file.path(save_path, file_name),
+    ggplot2::ggsave(
+      filename = file.path(save_path, file_name),
       plot = enrich_plot, width = 8, height = 7.8, units = "in", dpi = 600
     )
-
-    message(paste("Plot saved at:", file.path(save_path, file_name)))
   }
 
-  return(enrich_plot)
+  enrich_plot
+}
+
+create_dae_volcano <- function(toptables,
+                               cell_compartment,
+                               condition_a,
+                               condition_b,
+                               save_path = NULL,
+                               use_shrunk = TRUE,
+                               top_n = 20) {
+  # Ensure expected global cutoffs exist (clear error if not)
+  if (!exists("logFC_volcano_cutoff", inherits = TRUE)) {
+    stop("logFC_volcano_cutoff is not defined in the environment.")
+  }
+  if (!exists("padj_volcano_cutoff", inherits = TRUE)) {
+    stop("padj_volcano_cutoff is not defined in the environment.")
+  }
+
+  # Define axis limits used below
+  xlim <- c(-8, 8)
+  ylim <- c(0, 20)
+
+  # Build name and fetch table
+  toptable_name <- paste0(cell_compartment, "_", condition_a, "_", condition_b)
+  tt <- toptables[[toptable_name]]
+  if (is.null(tt)) stop("No toptable found for: ", toptable_name)
+
+  # Ensure gene_id exists
+  if (!("gene_id" %in% names(tt))) {
+    tt <- tt %>% tibble::rownames_to_column(var = "gene_id")
+  }
+
+  # Choose LFC column
+  lfc_col <- if (isTRUE(use_shrunk) && "logFC_shrunk" %in% names(tt)) "logFC_shrunk" else "logFC"
+  if (!(lfc_col %in% names(tt))) stop("No logFC column found (expected ", lfc_col, ").")
+  if (!("adj.P.Val" %in% names(tt))) stop("adj.P.Val column not found.")
+
+  df <- tt %>%
+    dplyr::mutate(
+      lfc = .data[[lfc_col]],
+      padj = adj.P.Val,
+      padj_clamped = pmax(pmin(padj, 1), 1e-300),
+      mlog10 = -log10(padj_clamped),
+      diffexpressed = dplyr::case_when(
+        is.finite(lfc) & is.finite(padj) & lfc > logFC_volcano_cutoff & padj < padj_volcano_cutoff ~ "up",
+        is.finite(lfc) & is.finite(padj) & lfc < -logFC_volcano_cutoff & padj < padj_volcano_cutoff ~ "down",
+        TRUE ~ "no"
+      ),
+      hover_text = paste0(
+        "<b>Gene:</b> ", gene_id,
+        "<br><b>", lfc_col, ":</b> ", signif(lfc, 4),
+        "<br><b>adj.P.Val:</b> ", signif(padj, 4)
+      )
+    ) %>%
+    dplyr::filter(is.finite(lfc), is.finite(mlog10))
+
+  # Top N by absolute effect
+  df_sorted <- df %>% dplyr::arrange(dplyr::desc(abs(lfc)))
+  top_n <- min(top_n, nrow(df_sorted))
+  top_ids <- df_sorted$gene_id[seq_len(top_n)]
+
+  df <- df %>%
+    dplyr::mutate(
+      gene_label = dplyr::if_else(gene_id %in% top_ids & diffexpressed != "no", gene_id, NA_character_)
+    )
+
+  volcano_plot <- ggplot2::ggplot(
+    df,
+    ggplot2::aes(x = lfc, y = mlog10, color = diffexpressed, label = gene_label)
+  ) +
+    ggplot2::geom_point(size = 0.9, alpha = 0.5) +
+    ggplot2::geom_vline(
+      xintercept = c(-logFC_volcano_cutoff, logFC_volcano_cutoff),
+      col = "#dd9d6b", linetype = "dashed"
+    ) +
+    ggplot2::geom_hline(
+      yintercept = -log10(padj_volcano_cutoff),
+      col = "#dd9d6b", linetype = "dashed"
+    ) +
+    ggplot2::scale_color_manual(
+      name = "Differential abundance",
+      values = c("down" = "#189392", "no" = "#dcdbc8", "up" = "#c43a50"),
+      labels = c("down" = "Decreased", "no" = "No significant", "up" = "Increased")
+    ) +
+    ggrepel::geom_label_repel(
+      ggplot2::aes(label = gene_label),
+      size = 2.2,
+      box.padding = 0.25,
+      segment.color = "#d7d7d7",
+      max.overlaps = Inf,
+      show.legend = FALSE
+    ) +
+    ggplot2::coord_cartesian(ylim = ylim, xlim = xlim) +
+    ggplot2::scale_x_continuous(breaks = seq(xlim[1], xlim[2], 2)) +
+    ggplot2::scale_y_continuous(breaks = seq(ylim[1], ylim[2], 2)) +
+    ggplot2::labs(
+      title = paste(cell_compartment, "-", condition_a, "vs.", condition_b),
+      subtitle = "Differential abundance (labeled = top effects among significant)",
+      x = lfc_col,
+      y = "-log10 adjusted p-value"
+    ) +
+    ggplot2::theme(
+      plot.background = ggplot2::element_rect(fill = "#FFFFFF"),
+      panel.background = ggplot2::element_rect(fill = "#FFFFFF"),
+      plot.margin = ggplot2::margin(5, 25, 5, 5, "pt"),
+      plot.title = ggplot2::element_text(face = "bold", size = ggplot2::rel(1.5)),
+      plot.subtitle = ggplot2::element_text(size = ggplot2::rel(1)),
+      axis.title.x = ggplot2::element_text(size = ggplot2::rel(0.8)),
+      axis.title.y = ggplot2::element_text(size = ggplot2::rel(0.8)),
+      axis.text.x = ggplot2::element_text(size = ggplot2::rel(0.6)),
+      axis.text.y = ggplot2::element_text(size = ggplot2::rel(0.6)),
+      axis.line = ggplot2::element_line(color = "grey35", linewidth = 0.25),
+      panel.grid.major = ggplot2::element_line(color = "#F0F0F0", linewidth = 0.3),
+      panel.grid.minor = ggplot2::element_line(color = "#F0F0F0", linetype = "dotted", linewidth = 0.2),
+      legend.position = "top",
+      legend.background = ggplot2::element_rect(fill = "white"),
+      legend.key.size = grid::unit(0.5, "cm"),
+      legend.title = ggplot2::element_text(face = "bold", size = ggplot2::rel(0.6)),
+      legend.text = ggplot2::element_text(face = "italic", size = ggplot2::rel(0.6))
+    )
+
+  if (!is.null(save_path)) {
+    if (!dir.exists(save_path)) dir.create(save_path, recursive = TRUE)
+    file_name <- paste0(cell_compartment, "_", condition_a, "_vs_", condition_b, "_volcano.png")
+    ggplot2::ggsave(
+      filename = file.path(save_path, file_name),
+      plot = volcano_plot,
+      width = 8, height = 7.8, units = "in", dpi = 600
+    )
+  }
+
+  list(plot = volcano_plot, data = df, lfc_col = lfc_col)
 }

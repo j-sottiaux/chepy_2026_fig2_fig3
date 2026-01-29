@@ -1,4 +1,6 @@
-# Load required libraries
+# Comprehensive Omics Data Enrichment eXplorer (CODEX) — Shiny app
+
+# Load required libraries ----
 {
   library(tidyverse)
   library(ggplot2)
@@ -13,11 +15,12 @@
 gc()
 set.seed(12345)
 
-# Source functions
+# Source functions / objects
 source(file = "scripts/00_functions.R")
 
-app_version <- "v1.2.0"
+app_version <- "v1.3.1"
 
+# Theme ----
 theme_codex <- bs_theme(
   version = 5,
   bootswatch = "litera",
@@ -32,7 +35,7 @@ theme_codex <- bs_theme(
     .codex-footer { border-top: 1px solid #E5E7EB; padding: 10px 0; opacity: .8; font-size: 12px; }
     .card { border-color: #E5E7EB; box-shadow: none; }
 
-    /* Header harmonization (uses Litera secondary hue) */
+    /* Header harmonization */
     .card-header,
     .accordion-button{
       background-color: rgba(var(--bs-secondary-rgb), 0.08);
@@ -43,7 +46,7 @@ theme_codex <- bs_theme(
       color: inherit;
     }
 
-    /* Sidebar info card look (blue border + tinted header) */
+    /* Sidebar info card look */
     .card.sidebar-info {
       border: 1px solid rgba(var(--bs-info-rgb), 0.55) !important;
     }
@@ -61,7 +64,7 @@ theme_codex <- bs_theme(
     /* Tighter spacing */
     .bslib-sidebar-layout { gap: .75rem; }
 
-    /* Volcano action row (top, to avoid scrolling) */
+    /* Volcano action row (top) */
     .plot-actions-top{
       display:flex;
       justify-content:space-between;
@@ -83,7 +86,10 @@ theme_codex <- bs_theme(
       margin-bottom:.5rem;
     }
 
-    /* Scrollable main area so stacked plots remain readable */
+    /* GeneCards row */
+    .genecards-row{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+
+    /* Scrollable main area */
     #mainScroll{
       overflow-y: auto;
       height: calc(100vh - 160px);
@@ -91,10 +97,10 @@ theme_codex <- bs_theme(
     }
   ")
 
+
+# UI ----
 ui <- page_fillable(
   theme = theme_codex,
-
-  # Header (logo + title + subtitle)
   tags$div(
     class = "codex-header",
     tags$div(
@@ -117,6 +123,7 @@ ui <- page_fillable(
     });
   ")),
   layout_sidebar(
+    fillable = TRUE,
     sidebar = sidebar(
       width = 360,
       card(
@@ -148,7 +155,7 @@ ui <- page_fillable(
           hr(),
           pickerInput(
             "enrich_cat",
-            tags$strong("4️⃣ Enrichment analysis"),
+            tags$strong("4️⃣ Core enrichment genes"),
             choices = c("gsea", "ora", "gsea & ora")
           ),
           div(style = "height:.5rem;"),
@@ -156,15 +163,11 @@ ui <- page_fillable(
         )
       )
     ),
-
-    # Main content (scrollable)
     tags$div(
       id = "mainScroll",
       uiOutput("main_layout_ui")
     )
   ),
-
-  # Footer
   tags$footer(
     class = "codex-footer",
     tags$div(
@@ -178,6 +181,7 @@ ui <- page_fillable(
   )
 )
 
+# Server ----
 server <- function(input, output, session) {
   padj_threshold <- 0.05
 
@@ -210,7 +214,7 @@ server <- function(input, output, session) {
 
     thr <- -log10(padj_threshold)
 
-    df <- df %>%
+    rv$enrich_df <- df %>%
       mutate(
         logGSEA = -log10(gsea_padj + 1e-10),
         logORA = -log10(ora_padj + 1e-10),
@@ -221,22 +225,37 @@ server <- function(input, output, session) {
         pathway_relation = factor(pathway_relation, levels = names(pathways_colors))
       )
 
-    rv$enrich_df <- df
-
-    rv$enrich_gg <- create_shiny_enrichment(
+    rv$enrich_gg <- create_codex_enrichment(
       enrich_category     = rv$params$enrich_cat,
       db_name             = rv$params$db_name,
       cell_compartment    = rv$params$cell_comp,
       condition           = rv$params$bio_cond,
       pathway_description = "",
       padj_threshold      = padj_threshold,
-      save_path           = "figures/"
+      save_path           = NULL # no autosave
     ) +
       labs(title = NULL, subtitle = NULL)
   })
 
   output$main_layout_ui <- renderUI({
-    req(rv$enrich_df, rv$params)
+    # Landing state (before first run)
+    if (is.null(rv$enrich_df) || is.null(rv$params) || is.null(rv$enrich_gg)) {
+      return(
+        card(
+          card_header(tags$strong("CODEX")),
+          card_body(
+            tags$div(
+              class = "alert alert-secondary",
+              "Click “Generate plot” to load enrichment results and enable interactive exploration."
+            )
+          )
+        )
+      )
+    }
+
+    # Explicit heights so the plot always reserves space reliably
+    enrich_h <- if (is.null(rv$selected_pathway)) "72vh" else "58vh"
+    volcano_h <- "58vh"
 
     enrich_header <- tagList(
       tags$strong("Enrichment integration"),
@@ -253,7 +272,6 @@ server <- function(input, output, session) {
       )
     )
 
-    # Enrichment Save PNG moved to TOP-LEFT
     enrich_card <- card(
       card_header(enrich_header),
       card_body(
@@ -261,7 +279,7 @@ server <- function(input, output, session) {
           class = "enrich-actions-top",
           downloadButton("dl_enrich_png", "Save PNG", class = "btn btn-info btn-sm")
         ),
-        plotlyOutput("enrich_plot", height = "72vh")
+        plotlyOutput("enrich_plot", height = enrich_h)
       )
     )
 
@@ -275,24 +293,20 @@ server <- function(input, output, session) {
     )
 
     volcano_body <- tagList(
-      # Volcano Save PNG at TOP-LEFT (left of Clear pathway)
       div(
         class = "plot-actions-top",
         div(
-          class = "plot-actions-left",
+          class = "plot-actions-left genecards-row",
           downloadButton("dl_volcano_png", "Save PNG", class = "btn btn-info btn-sm"),
-          actionButton("clear_pathway", "Clear pathway", class = "btn btn-warning btn-sm")
-        ),
-        div(
-          class = "plot-actions-right",
-          uiOutput("gene_info")
+          actionButton("clear_pathway", "Clear pathway", class = "btn btn-warning btn-sm"),
+          actionButton("open_genecards_btn", "Open GeneCards", class = "btn btn-primary btn-sm"),
+          uiOutput("selected_gene_ui")
         )
       ),
-      plotlyOutput("volcano_plot", height = "72vh")
+      plotlyOutput("volcano_plot", height = volcano_h)
     )
 
     tagList(
-      # Volcano on top
       accordion(
         id = "volcano_acc",
         open = if (isTRUE(rv$volcano_open)) "volcano_item" else character(0),
@@ -302,7 +316,6 @@ server <- function(input, output, session) {
           volcano_body
         )
       ),
-      # Enrichment below
       enrich_card
     )
   })
@@ -317,13 +330,13 @@ server <- function(input, output, session) {
     y_lim <- round(max(df$logORA, na.rm = TRUE) + 3)
 
     df_bg <- df %>%
-      filter(!co_signif) %>%
-      filter(is.finite(logGSEA), is.finite(logORA))
+      dplyr::filter(!co_signif) %>%
+      dplyr::filter(is.finite(logGSEA), is.finite(logORA))
 
     df_sig <- df %>%
-      filter(co_signif) %>%
-      filter(is.finite(logGSEA), is.finite(logORA)) %>%
-      mutate(
+      dplyr::filter(co_signif) %>%
+      dplyr::filter(is.finite(logGSEA), is.finite(logORA)) %>%
+      dplyr::mutate(
         hover = paste0(
           "<b>", Description, "</b>",
           "<br><b>-log10 GSEA padj:</b> ", round(logGSEA, 3),
@@ -333,45 +346,46 @@ server <- function(input, output, session) {
 
     pal <- pathways_colors[levels(df_sig$pathway_relation)]
 
-    plotly::plot_ly(source = "enrich") %>%
-      add_markers(
-        data = df_bg,
-        x = ~logGSEA, y = ~logORA,
-        marker = list(size = 6, opacity = 0.35, color = "grey75"),
-        hoverinfo = "skip"
-      ) %>%
-      add_markers(
+    plotly::plot_ly(
+      data = df_bg,
+      x = ~logGSEA, y = ~logORA,
+      type = "scatter", mode = "markers",
+      source = "enrich",
+      showlegend = FALSE,
+      hoverinfo = "skip",
+      marker = list(size = 6, color = "rgba(120,120,120,0.4)")
+    ) %>%
+      plotly::add_trace(
         data = df_sig,
         x = ~logGSEA, y = ~logORA,
+        type = "scatter", mode = "markers",
+        inherit = FALSE,
         color = ~pathway_relation,
         colors = pal,
         marker = list(size = 9, opacity = 0.9),
-        text = ~hover,
-        hoverinfo = "text",
-        customdata = ~Description
+        text = ~hover, hoverinfo = "text",
+        customdata = ~Description,
+        showlegend = TRUE
       ) %>%
-      layout(
+      plotly::layout(
         xaxis = list(title = "-log10(GSEA padj)", range = c(0, x_lim), zeroline = FALSE),
         yaxis = list(title = "-log10(ORA padj)", range = c(0, y_lim), zeroline = FALSE),
         legend = list(orientation = "h", x = 0, y = 1.08),
         shapes = list(list(
-          type = "rect",
-          layer = "below",
-          x0 = thr, x1 = x_lim,
-          y0 = thr, y1 = y_lim,
+          type = "rect", layer = "below",
+          x0 = thr, x1 = x_lim, y0 = thr, y1 = y_lim,
           line = list(color = "grey30", dash = "dash", width = 1),
           fillcolor = "rgba(200,200,200,0.25)"
         )),
         annotations = list(list(
           x = x_lim, y = thr - 0.2,
           text = "<b>co-significance area</b>",
-          showarrow = FALSE,
-          xanchor = "right",
+          showarrow = FALSE, xanchor = "right",
           font = list(size = 10, color = "grey30")
         )),
         margin = list(l = 60, r = 20, t = 20, b = 55)
       ) %>%
-      config(displayModeBar = TRUE)
+      plotly::config(displayModeBar = TRUE)
   })
 
   observeEvent(plotly::event_data("plotly_click", source = "enrich"), {
@@ -385,16 +399,15 @@ server <- function(input, output, session) {
     rv$gene_clicked <- NULL
     rv$volcano_open <- TRUE
 
-    # scroll to top so volcano is immediately visible
     session$sendCustomMessage("scrollMainTop", list())
 
-    rv$volcano_gg <- create_shiny_volcano(
+    rv$volcano_gg <- create_codex_volcano(
       enrich_category     = rv$params$enrich_cat,
       db_name             = rv$params$db_name,
       cell_compartment    = rv$params$cell_comp,
       condition           = rv$params$bio_cond,
       pathway_description = rv$selected_pathway,
-      save_path           = "figures/"
+      save_path           = NULL # no autosave
     ) +
       labs(title = NULL, subtitle = NULL)
   })
@@ -407,18 +420,34 @@ server <- function(input, output, session) {
     session$sendCustomMessage("scrollMainTop", list())
   })
 
-  observeEvent(input$open_genecards, {
-    req(input$open_genecards)
-    utils::browseURL(paste0(
-      "https://www.genecards.org/cgi-bin/carddisp.pl?gene=",
-      input$open_genecards
-    ))
-  })
-
   output$volcano_plot <- renderPlotly({
     req(rv$volcano_gg)
+
+    validate(need(exists("logFC_volcano_cutoff", inherits = TRUE), "logFC_volcano_cutoff not found."))
+    validate(need(exists("padj_volcano_cutoff", inherits = TRUE), "padj_volcano_cutoff not found."))
+
+    v1 <- -logFC_volcano_cutoff
+    v2 <- logFC_volcano_cutoff
+    h1 <- -log10(padj_volcano_cutoff)
+
+    shapes <- list(
+      list(
+        type = "line", xref = "x", yref = "paper", x0 = v1, x1 = v1, y0 = 0, y1 = 1,
+        line = list(color = "#dd9d6b", width = 1, dash = "dash")
+      ),
+      list(
+        type = "line", xref = "x", yref = "paper", x0 = v2, x1 = v2, y0 = 0, y1 = 1,
+        line = list(color = "#dd9d6b", width = 1, dash = "dash")
+      ),
+      list(
+        type = "line", xref = "paper", yref = "y", x0 = 0, x1 = 1, y0 = h1, y1 = h1,
+        line = list(color = "#dd9d6b", width = 1, dash = "dash")
+      )
+    )
+
     plotly::ggplotly(rv$volcano_gg, tooltip = "text", source = "volcano") %>%
-      config(displayModeBar = TRUE)
+      plotly::layout(shapes = shapes) %>%
+      plotly::config(displayModeBar = TRUE)
   })
 
   observeEvent(plotly::event_data("plotly_click", source = "volcano"), {
@@ -431,20 +460,24 @@ server <- function(input, output, session) {
     rv$gene_clicked <- gene_id
   })
 
-  output$gene_info <- renderUI({
-    req(rv$gene_clicked)
-
-    tagList(
-      tags$a(
-        rv$gene_clicked,
-        href = "javascript:void(0);",
-        style = "text-decoration: underline; cursor: pointer;",
-        onclick = sprintf(
-          "Shiny.setInputValue('open_genecards', '%s', {priority: 'event'});",
-          rv$gene_clicked
-        )
+  output$selected_gene_ui <- renderUI({
+    if (is.null(rv$gene_clicked)) {
+      tags$span(style = "opacity:.7; font-size:12px;", "Click a volcano point to select a gene.")
+    } else {
+      tags$span(
+        style = "font-size:12px;",
+        tags$b("Selected: "),
+        tags$code(rv$gene_clicked)
       )
-    )
+    }
+  })
+
+  observeEvent(input$open_genecards_btn, {
+    req(rv$gene_clicked)
+    utils::browseURL(paste0(
+      "https://www.genecards.org/cgi-bin/carddisp.pl?gene=",
+      rv$gene_clicked
+    ))
   })
 
   output$dl_enrich_png <- downloadHandler(
@@ -477,4 +510,5 @@ server <- function(input, output, session) {
   )
 }
 
+# Launch app ----
 shinyApp(ui, server)
