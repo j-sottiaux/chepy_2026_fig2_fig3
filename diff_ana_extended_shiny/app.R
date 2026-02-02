@@ -133,7 +133,7 @@ ui <- page_fillable(
             selected = "HC"
           ),
           hr(),
-          checkboxInput("use_shrunk", "Use logFC_shrunk (if available)", value = TRUE),
+          checkboxInput("use_shrunk", "Use logFC_shrunk", value = TRUE),
           div(style = "height:.5rem;"),
           actionButton("refresh_btn", "Generate volcano", class = "btn btn-primary w-100")
         )
