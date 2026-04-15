@@ -39,6 +39,33 @@ clean_proteo_df <- function(df) {
   return(clean_df)
 }
 
+map_gene_symbols <- function(df) {
+  df$ensembl_gene_id <- rownames(df)
+  annot <- AnnotationDbi::select(
+    org.Hs.eg.db,
+    keys = df$ensembl_gene_id,
+    keytype = "ENSEMBL",
+    columns = c("ENSEMBL", "SYMBOL")
+  )
+
+  df <- df %>%
+    dplyr::left_join(annot, by = c("ensembl_gene_id" = "ENSEMBL"))
+
+  df$SYMBOL[trimws(df$SYMBOL) == ""] <- NA
+
+  df <- df %>%
+    dplyr::filter(!is.na(SYMBOL)) %>%
+    dplyr::rename(gene_id = SYMBOL) %>%
+    dplyr::filter(!is.na(padj)) %>%
+    dplyr::rename(t = stat) %>%
+    dplyr::rename(logFC = log2FoldChange) %>%
+    dplyr::select(-"ensembl_gene_id")
+
+  df <- df[, c("gene_id", "baseMean", "logFC", "lfcSE", "t", "pvalue", "padj")]
+
+  return(df)
+}
+
 clean_toptables_for_gsea <- function(toptables) {
   lapply(names(toptables), function(name) {
     df <- toptables[[name]] # Extract each top table as a data frame
@@ -150,7 +177,7 @@ compute_pca <- function(df, matrix_type, save_path = "figures/01_exploratory_ana
   pca_plot <- plot_list$graph
 
   final_plot <- pca_plot +
-    theme(
+    ggplot2::theme(
       plot.background = element_rect(fill = "#F0F0F0", color = NA),
       panel.background = element_rect(fill = "#FFFFFF", color = NA),
       plot.margin = margin(15, 15, 15, 15),
@@ -211,7 +238,7 @@ compute_plsda <- function(df, matrix_type, save_path = "figures/01_exploratory_a
   plsda_plot <- plot_list$graph
 
   final_plot <- plsda_plot +
-    theme(
+    ggplot2::theme(
       plot.background = element_rect(fill = "#F0F0F0", color = NA),
       panel.background = element_rect(fill = "#FFFFFF", color = NA),
       plot.margin = margin(15, 15, 15, 15),
@@ -797,6 +824,66 @@ integrate_gsea_ora_results <- function(gsea_obj, ora_obj,
   return(results_list)
 }
 
+integrate_aarhus_gsea_ora_results <- function(gsea_obj, ora_obj,
+                                              db_names = names(ref_proteome),
+                                              conditions = names(aarhus_ora_genelist),
+                                              save_path = "data/07_enrichments_integration",
+                                              save_files = TRUE) {
+  if (save_files && !dir.exists(save_path)) {
+    dir.create(save_path, recursive = TRUE)
+  }
+
+  # Function to process one pair of db_name and condition
+  process_pair <- function(db_name, condition) {
+    gsea_df <- gsea_obj[[db_name]][[condition]]@result %>%
+      dplyr::select(Description, NES, p.adjust) %>%
+      dplyr::mutate(NES = abs(NES)) %>%
+      dplyr::rename(gsea_padj = p.adjust)
+
+    ora_df <- ora_obj[[db_name]][[condition]]@result %>%
+      dplyr::select(Description, FoldEnrichment, p.adjust) %>%
+      dplyr::rename(ora_padj = p.adjust)
+
+    merged_df <- full_join(gsea_df, ora_df, by = "Description") %>%
+      dplyr::mutate(
+        gsea_padj = if_else(is.na(gsea_padj) & ora_padj < 0.05, 1, gsea_padj),
+        ora_padj = if_else(is.na(ora_padj) & gsea_padj < 0.05, 1, ora_padj),
+        pathway_relation = categorize_pathway(Description)
+      ) %>%
+      dplyr::select(Description, pathway_relation, NES, gsea_padj, FoldEnrichment, ora_padj)
+
+    return(merged_df)
+  }
+
+  # Iterate over all combinations
+  param_grid <- expand.grid(db_name = db_names, condition = conditions, stringsAsFactors = FALSE)
+
+  results_list <- purrr::pmap(param_grid, function(db_name, condition) {
+    tryCatch(
+      {
+        message("Processing: ", db_name, " / ", condition)
+        result <- process_pair(db_name, condition)
+
+        if (save_files) {
+          file_path <- file.path(save_path, paste0(db_name, "_", condition, "_enrich_integration.xlsx"))
+          writexl::write_xlsx(result, file_path)
+          message("Saved: ", file_path)
+        }
+
+        return(result)
+      },
+      error = function(e) {
+        warning("❌ Failed: ", db_name, " / ", condition, " → ", conditionMessage(e))
+        return(NULL)
+      }
+    )
+  })
+
+  # Name the results
+  names(results_list) <- paste(param_grid$db_name, param_grid$condition, sep = "_")
+  return(results_list)
+}
+
 # e/ Create "Master data" for the "Master volcano plot" ----
 create_enrichment_master_data <- function(
   gsea_obj, ora_obj,
@@ -898,7 +985,7 @@ create_enrichment_master_data <- function(
 
 # 5/ Data visualization functions -----
 plot_theme <- {
-  theme(
+  ggplot2::theme(
     # General aspect of the plot
     plot.background = element_rect(fill = "#F0F0F0"),
     panel.background = element_rect(fill = "#FFFFFF"),
@@ -927,7 +1014,7 @@ plot_theme <- {
 }
 
 publication_theme <- {
-  theme(
+  ggplot2::theme(
     # General aspect of the plot
     plot.background = element_rect(fill = "#FFFFFF"),
     panel.background = element_rect(fill = "#FFFFFF"),
@@ -993,7 +1080,7 @@ plot_dim_reduction <- function(df, save_path = "figures/01_exploratory_analysis"
       x = "Principal Component 1",
       y = "Principal Component 2"
     ) +
-    theme(
+    ggplot2::theme(
       # General aspect
       plot.background = element_rect(fill = "#FFFFFF"),
       panel.background = element_rect(fill = "#FFFFFF"),
@@ -1036,7 +1123,7 @@ plot_dim_reduction <- function(df, save_path = "figures/01_exploratory_analysis"
   return(final_plot)
 }
 
-create_volcano_plots <- function(toptables, save_path = "figures/02_differential_analysis") {
+create_volcano_plots <- function(toptables, save_path = "figures/02_differential_analysis/01_infinite_proteins") {
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -1337,7 +1424,7 @@ create_codex_volcano <- function(enrich_category,
       x = "Shrunk logFC (ashr)",
       y = "-log10 adjusted p-value"
     ) +
-    theme(
+    ggplot2::theme(
       plot.background = element_rect(fill = "#FFFFFF"),
       panel.background = element_rect(fill = "#FFFFFF"),
       plot.margin = margin(5, 25, 5, 5, "pt"),
@@ -1649,4 +1736,106 @@ create_dae_volcano <- function(toptables,
   }
 
   list(plot = volcano_plot, data = df, lfc_col = lfc_col)
+}
+
+create_volcano_aarhus <- function(toptables, save_path = "figures/02_differential_analysis/02_aarhus_mRNA") {
+  if (!dir.exists(save_path)) {
+    dir.create(save_path, recursive = TRUE)
+  }
+
+  lapply(names(toptables), function(name) {
+    df <- toptables[[name]] # Extract each top table as a data frame
+    nickname <- name
+
+    # Create differential expression cutoffs
+    df$diffexpressed <- "no"
+    df$diffexpressed[df$logFC > logFC_volcano_cutoff & df$padj < padj_volcano_cutoff] <- "up"
+    df$diffexpressed[df$logFC < -logFC_volcano_cutoff & df$padj < padj_volcano_cutoff] <- "down"
+
+    # Select the top 20 genes
+    df_sig <- df %>%
+      dplyr::filter(
+        !is.na(logFC),
+        !is.na(padj),
+        abs(logFC) > logFC_volcano_cutoff,
+        padj < padj_volcano_cutoff
+      ) %>%
+      dplyr::arrange(desc(abs(logFC)))
+
+    df_top20 <- head(df_sig$gene_id, 20)
+
+    # Label top genes
+    df$gene_label <- ifelse(df$gene_id %in% df_top20 & df$diffexpressed != "no",
+      df$gene_id,
+      NA
+    )
+
+    # Generate the volcano plot
+    volcano_df <- ggplot(df, aes(x = logFC, y = -log10(padj), color = diffexpressed, label = gene_label)) +
+      geom_point(size = 0.9, alpha = 0.5) +
+      geom_vline(xintercept = c(-logFC_volcano_cutoff, logFC_volcano_cutoff), col = "#dd9d6b", linetype = "dashed") +
+      geom_hline(yintercept = -log10(padj_volcano_cutoff), col = "#dd9d6b", linetype = "dashed") +
+      scale_color_manual(
+        name = "Differential abundance",
+        values = c("down" = "#189392", "no" = "#dcdbc8", "up" = "#c43a50"),
+        labels = c("Decreased", "No significant", "Increased")
+      ) +
+      geom_label_repel(
+        aes(label = gene_label),
+        size = 2.2,
+        box.padding = 0.25,
+        segment.color = "#d7d7d7",
+        max.overlaps = Inf,
+        show.legend = FALSE
+      ) +
+      coord_cartesian(ylim = c(0, 175), xlim = c(-10, 10)) +
+      scale_x_continuous(breaks = seq(-10, 10, 2)) +
+      scale_y_continuous(breaks = seq(0, 175, 25)) +
+      labs(
+        title = paste(nickname),
+        subtitle = "Differential abundance of mRNA transcripts (labeled as gene names)",
+        x = "log2 Fold Change",
+        y = "-log10 adjusted p-value"
+      ) +
+      theme(
+        # General aspect of the plot
+        plot.background = element_rect(fill = "#FFFFFF"),
+        panel.background = element_rect(fill = "#FFFFFF"),
+        plot.margin = margin(t = 10, r = 10, b = 10, l = 10, unit = "pt"),
+        plot.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(1.5)),
+        plot.subtitle = element_text(color = "black", family = "Helvetica Neue", hjust = 0, size = rel(1)),
+
+        # Axis titles and texts
+        axis.title.x = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)),
+        axis.text.x = element_text(color = "black", family = "Helvetica Neue", size = rel(0.8), angle = 0, hjust = 0.5),
+        axis.title.y = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)),
+        axis.text.y = element_text(color = "black", family = "Helvetica Neue", size = rel(0.8), angle = 0, hjust = 0.5),
+        axis.line = element_line(color = "#5f5f5f", linetype = "solid", linewidth = 0.25),
+        axis.ticks = element_line(color = "black", linetype = "solid", linewidth = 0.25),
+        panel.grid.major = element_line(color = "#EAEAEA", linetype = "dotted", linewidth = 0.25),
+
+        # Legend
+        legend.box.margin = margin(0.1, 0.1, 0.1, 0.1),
+        legend.position = c(0.25, 0.85),
+        legend.background = element_rect(fill = "#FFFFFF", color = "#5f5f5f", linewidth = 0.1, linetype = "solid"),
+        legend.key.size = unit(0.5, "cm"),
+        legend.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", size = rel(1)),
+        legend.text = element_text(color = "black", family = "Helvetica Neue", face = "italic", size = rel(0.9))
+      )
+
+    # Save the plot
+    file_name <- paste0("volcano_", nickname, ".png")
+    ggsave(
+      filename = file_name,
+      plot = volcano_df,
+      path = save_path,
+      width = 6, height = 6,
+      units = "in",
+      dpi = 600
+      # device = "tiff"
+    )
+
+    message(paste(file_name, "saved in:", save_path))
+    return(volcano_df)
+  })
 }
