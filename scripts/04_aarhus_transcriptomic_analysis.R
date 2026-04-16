@@ -1,5 +1,7 @@
 # Load required libraries
 {
+  library(pheatmap)
+
   library(DESeq2)
   library(ashr)
 
@@ -18,7 +20,7 @@ source(file = "scripts/00_functions.R")
 # 1.Import and prepare matrices for DESeq2 ----
 
 ## Raw counts matrix ---
-rna_counts <- as.matrix(
+aarhus_rna_counts <- as.matrix(
   read.table(
     file = "data/00_aarhus_data/read_counts_rna.txt",
     header = TRUE,
@@ -28,22 +30,22 @@ rna_counts <- as.matrix(
   )
 )
 
-colnames(rna_counts) <- paste0("sample_", 1:9)
+colnames(aarhus_rna_counts) <- paste0("sample_", 1:9)
 
 ## Metadata data frame ---
-rna_metadata <- data.frame(
+aarhus_rna_metadata <- data.frame(
   row.names = paste0("sample_", 1:9),
   condition = factor(rep(c("ATA", "HC", "IFNa"), each = 3))
 )
 
 ## Sanity check ---
-message(all(rownames(rna_metadata) == colnames(rna_counts))) # should be TRUE
+message(all(rownames(aarhus_rna_metadata) == colnames(aarhus_rna_counts))) # should be TRUE
 
 # 2. Construct DESeqDataSet object ----
 ## Generate the object ---
 aarhus_dds <- DESeqDataSetFromMatrix(
-  countData = rna_counts,
-  colData = rna_metadata,
+  countData = aarhus_rna_counts,
+  colData = aarhus_rna_metadata,
   design = ~condition
 )
 dim(aarhus_dds)
@@ -128,12 +130,21 @@ aarhus_res <- list(
   aarhus_IFNa_vs_HC = aarhus_IFNa_vs_HC
 )
 
-# Gene Symbol mapping & visualization ---
+# Gene Symbol mapping ---
 aarhus_toptables <- lapply(aarhus_res, map_gene_symbols)
+
+
+# 5. DA Visualization ----
+# Volcano plots ---
 create_volcano_aarhus(aarhus_toptables)
 
+# Heatmaps ---
+create_heatmaps_aarhus(
+  toptables = aarhus_toptables,
+  vsd = aarhus_vsd
+)
 
-# 5. Enrichment analysis ----
+# 6. Enrichment analysis ----
 # Set genelist for GSEA & gene vector for ORA
 aarhus_gsea_genelist <- clean_toptables_for_gsea(aarhus_toptables) %>%
   setNames(names(aarhus_toptables))

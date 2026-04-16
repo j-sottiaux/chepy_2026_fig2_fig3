@@ -1123,6 +1123,94 @@ plot_dim_reduction <- function(df, save_path = "figures/01_exploratory_analysis"
   return(final_plot)
 }
 
+create_heatmaps_aarhus <- function(
+  toptables,
+  vsd,
+  id_col = "ensembl_id",
+  symbol_col = "gene_id",
+  padj_cutoff = 0.05,
+  logFC_cutoff = 1,
+  top_n = 25,
+  save_path = "figures/02_differential_analysis/02_aarhus_mRNA"
+) {
+  if (!dir.exists(save_path)) {
+    dir.create(save_path, recursive = TRUE)
+  }
+
+  annotation_col <- as.data.frame(colData(vsd)[, "condition", drop = FALSE])
+  vsd_mat <- assay(vsd)
+
+  lapply(names(toptables), function(name) {
+    df <- toptables[[name]]
+
+    fc_col <- if ("logFC" %in% colnames(df)) {
+      "logFC"
+    } else if ("log2FoldChange" %in% colnames(df)) {
+      "log2FoldChange"
+    } else {
+      stop("No fold-change column found in ", name)
+    }
+
+    if (!id_col %in% colnames(df)) {
+      stop("Column '", id_col, "' not found in ", name)
+    }
+
+    df_sig <- df %>%
+      dplyr::filter(
+        !is.na(.data[[fc_col]]),
+        !is.na(.data$padj),
+        !is.na(.data[[id_col]]),
+        abs(.data[[fc_col]]) > logFC_cutoff,
+        .data$padj < padj_cutoff
+      ) %>%
+      dplyr::arrange(.data$padj) %>%
+      dplyr::slice_head(n = top_n)
+
+    if (nrow(df_sig) == 0) {
+      message("No significant genes for ", name)
+      return(NULL)
+    }
+
+    # keep only IDs present in the VST matrix
+    keep_ids <- intersect(df_sig[[id_col]], rownames(vsd_mat))
+
+    if (length(keep_ids) == 0) {
+      message("No matching IDs found in vsd for ", name)
+      return(NULL)
+    }
+
+    df_sig <- df_sig[match(keep_ids, df_sig[[id_col]]), , drop = FALSE]
+    mat <- vsd_mat[keep_ids, , drop = FALSE]
+
+    # replace rownames by symbols if available
+    if (symbol_col %in% colnames(df_sig)) {
+      rownames(mat) <- make.unique(as.character(df_sig[[symbol_col]]))
+    }
+
+    mat_scaled <- t(scale(t(mat)))
+    mat_scaled[is.na(mat_scaled)] <- 0
+
+    pheatmap::pheatmap(
+      mat_scaled,
+      annotation_col = annotation_col,
+      cluster_rows = TRUE,
+      cluster_cols = FALSE,
+      gaps_col = c(3, 6),
+      border_color = "grey85",
+      show_rownames = TRUE,
+      show_colnames = TRUE,
+      fontsize_row = 7,
+      main = paste0(name, " - top ", nrow(mat_scaled), " DE genes"),
+      filename = file.path(save_path, paste0("heatmap_", name, ".png")),
+      width = 6,
+      height = 8
+    )
+
+    message("heatmap_", name, ".png saved in: ", save_path)
+    invisible(mat_scaled)
+  })
+}
+
 create_volcano_plots <- function(toptables, save_path = "figures/02_differential_analysis/01_infinite_proteins") {
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
