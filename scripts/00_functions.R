@@ -59,9 +59,9 @@ map_gene_symbols <- function(df) {
     dplyr::filter(!is.na(padj)) %>%
     dplyr::rename(t = stat) %>%
     dplyr::rename(logFC = log2FoldChange) %>%
-    dplyr::select(-"ensembl_gene_id")
+    dplyr::rename(ensembl_id = ensembl_gene_id)
 
-  df <- df[, c("gene_id", "baseMean", "logFC", "lfcSE", "t", "pvalue", "padj")]
+  df <- df[, c("ensembl_id", "gene_id", "baseMean", "logFC", "lfcSE", "t", "pvalue", "padj")]
 
   return(df)
 }
@@ -1137,10 +1137,14 @@ create_heatmaps_aarhus <- function(
     dir.create(save_path, recursive = TRUE)
   }
 
-  annotation_col <- as.data.frame(colData(vsd)[, "condition", drop = FALSE])
   vsd_mat <- assay(vsd)
+  annotation_col <- as.data.frame(colData(vsd)[, "condition", drop = FALSE])
+  annotation_col <- annotation_col[colnames(vsd_mat), , drop = FALSE]
 
-  lapply(names(toptables), function(name) {
+  group_sizes <- table(annotation_col$condition)
+  gaps_col <- cumsum(group_sizes)[-length(group_sizes)]
+
+  res_list <- lapply(names(toptables), function(name) {
     df <- toptables[[name]]
 
     fc_col <- if ("logFC" %in% colnames(df)) {
@@ -1155,6 +1159,10 @@ create_heatmaps_aarhus <- function(
       stop("Column '", id_col, "' not found in ", name)
     }
 
+    if (!"padj" %in% colnames(df)) {
+      stop("Column 'padj' not found in ", name)
+    }
+
     df_sig <- df %>%
       dplyr::filter(
         !is.na(.data[[fc_col]]),
@@ -1163,7 +1171,7 @@ create_heatmaps_aarhus <- function(
         abs(.data[[fc_col]]) > logFC_cutoff,
         .data$padj < padj_cutoff
       ) %>%
-      dplyr::arrange(.data$padj) %>%
+      dplyr::arrange(.data$padj, dplyr::desc(abs(.data[[fc_col]]))) %>%
       dplyr::slice_head(n = top_n)
 
     if (nrow(df_sig) == 0) {
@@ -1171,8 +1179,7 @@ create_heatmaps_aarhus <- function(
       return(NULL)
     }
 
-    # keep only IDs present in the VST matrix
-    keep_ids <- intersect(df_sig[[id_col]], rownames(vsd_mat))
+    keep_ids <- df_sig[[id_col]][df_sig[[id_col]] %in% rownames(vsd_mat)]
 
     if (length(keep_ids) == 0) {
       message("No matching IDs found in vsd for ", name)
@@ -1181,21 +1188,28 @@ create_heatmaps_aarhus <- function(
 
     df_sig <- df_sig[match(keep_ids, df_sig[[id_col]]), , drop = FALSE]
     mat <- vsd_mat[keep_ids, , drop = FALSE]
+    mat <- mat[, rownames(annotation_col), drop = FALSE]
 
-    # replace rownames by symbols if available
+    mat <- mat[apply(mat, 1, sd, na.rm = TRUE) > 0, , drop = FALSE]
+
+    if (nrow(mat) == 0) {
+      message("No variable genes left for ", name)
+      return(NULL)
+    }
+
     if (symbol_col %in% colnames(df_sig)) {
-      rownames(mat) <- make.unique(as.character(df_sig[[symbol_col]]))
+      rownames(mat) <- make.unique(as.character(df_sig[[symbol_col]][match(rownames(mat), df_sig[[id_col]])]))
     }
 
     mat_scaled <- t(scale(t(mat)))
-    mat_scaled[is.na(mat_scaled)] <- 0
 
     pheatmap::pheatmap(
       mat_scaled,
       annotation_col = annotation_col,
+      annotation_names_col = FALSE,
       cluster_rows = TRUE,
       cluster_cols = FALSE,
-      gaps_col = c(3, 6),
+      gaps_col = gaps_col,
       border_color = "grey85",
       show_rownames = TRUE,
       show_colnames = TRUE,
@@ -1209,6 +1223,9 @@ create_heatmaps_aarhus <- function(
     message("heatmap_", name, ".png saved in: ", save_path)
     invisible(mat_scaled)
   })
+
+  names(res_list) <- names(toptables)
+  invisible(res_list)
 }
 
 create_volcano_plots <- function(toptables, save_path = "figures/02_differential_analysis/01_infinite_proteins") {

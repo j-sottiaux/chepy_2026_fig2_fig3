@@ -41,6 +41,7 @@ aarhus_rna_metadata <- data.frame(
 ## Sanity check ---
 message(all(rownames(aarhus_rna_metadata) == colnames(aarhus_rna_counts))) # should be TRUE
 
+
 # 2. Construct DESeqDataSet object ----
 ## Generate the object ---
 aarhus_dds <- DESeqDataSetFromMatrix(
@@ -65,6 +66,17 @@ aarhus_diff_analysis_res <- results(aarhus_dds)
 plotDispEsts(aarhus_dds) # Ok
 
 aarhus_vsd <- vst(aarhus_dds, blind = TRUE)
+
+sample_dist <- dist(t(assay(aarhus_vsd)))
+sample_dist_matrix <- as.matrix(sample_dist)
+rownames(sample_dist_matrix) <- paste(aarhus_vsd$condition, sep = "-")
+colnames(sample_dist_matrix) <- paste(aarhus_vsd$condition, sep = "-")
+
+pheatmap(sample_dist_matrix,
+  clustering_distance_cols = sample_dist,
+  clustering_distance_rows = sample_dist
+)
+
 plotPCA(aarhus_vsd, intgroup = "condition") # Ok, with caution due to low sample sizes
 
 ## Extract results + QC for visualizations and enrichment analysis ---
