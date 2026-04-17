@@ -1,5 +1,5 @@
 # 1/ Data processing functions -----
-import_raw_matrix <- function(file_path) {
+import_matrix <- function(file_path) {
   raw_matrix <- fread(file_path) %>%
     return(list(raw_matrix))
 }
@@ -82,20 +82,25 @@ clean_toptables_for_gsea <- function(toptables) {
 }
 
 clean_toptables_for_ora <- function(toptables) {
-  lapply(names(toptables), function(name) {
-    df <- toptables[[name]] # Extract each top table as a data frame
+  lapply(toptables, function(df) {
+    adjusted_pval_col <- if ("padj" %in% colnames(df)) {
+      "padj"
+    } else if ("adj.P.Val" %in% colnames(df)) {
+      "adj.P.Val"
+    } else {
+      stop("No adjusted p-value column found: expected 'padj' or 'adj.P.Val'")
+    }
 
     df$diffexpressed <- "no"
-    df$diffexpressed[df$logFC > logFC_threshold & df$adj.P.Val < padj_threshold] <- "up"
-    df$diffexpressed[df$logFC < -logFC_threshold & df$adj.P.Val < padj_threshold] <- "down"
+    df$diffexpressed[df$logFC > logFC_threshold & df[[adjusted_pval_col]] < padj_threshold] <- "up"
+    df$diffexpressed[df$logFC < -logFC_threshold & df[[adjusted_pval_col]] < padj_threshold] <- "down"
 
-    df_filtered <- df %>%
+    gene_vector <- df %>%
       dplyr::filter(diffexpressed != "no") %>%
-      dplyr::select(gene_id)
+      dplyr::distinct(gene_id, .keep_all = TRUE) %>%
+      dplyr::pull(gene_id)
 
-    gene_vector <- df_filtered$gene_id
-
-    return(list("gene_vector" = gene_vector))
+    list(gene_vector = gene_vector)
   })
 }
 
@@ -129,7 +134,7 @@ clean_evapass <- function(df) {
 filter_xp_proteome <- function(ref_list) {
   lapply(names(ref_list), function(name) {
     df <- ref_list[[name]]
-    df_filtered <- df[df$gene %in% xp_filter, ]
+    df_filtered <- df[df$gene %in% proteo_filter, ]
     return(df_filtered)
   })
 }
@@ -656,6 +661,11 @@ compute_ora <- function(xp_background, gene_list, save_path = "data/04_ora_resul
     conditions_results <- lapply(names(gene_list), function(condition) {
       gene_vector <- gene_list[[condition]]$gene_vector
 
+      # if (is.null(gene_vector) || length(gene_vector) == 0) {
+      #   message(paste("Skipping ORA for", condition, "with", db_name, ": gene_vector is NULL or empty"))
+      #   return(NULL)
+      # }
+
       # Run ORA using clusterProfiler's enricher() function
       # See settings  parameters modifications
       message(paste("ORA running for", condition, "with", db_name))
@@ -790,9 +800,9 @@ merge_enrichment_results <- function(result_list, enrich_type, save_path = "data
 }
 
 integrate_gsea_ora_results <- function(gsea_obj, ora_obj,
-                                       db_names = names(ref_proteome),
-                                       conditions = names(ora_genelist),
-                                       save_path = "data/07_enrichments_integration",
+                                       db_names = names(ref_background_genes),
+                                       conditions = names(proteo_ora_genelist),
+                                       save_path = "data/07_enrichments_integration/01_proteomics_dataset/",
                                        save_files = TRUE) {
   if (save_files && !dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
@@ -849,11 +859,11 @@ integrate_gsea_ora_results <- function(gsea_obj, ora_obj,
   return(results_list)
 }
 
-integrate_aarhus_gsea_ora_results <- function(gsea_obj, ora_obj,
-                                              db_names = names(ref_proteome),
-                                              conditions = names(aarhus_ora_genelist),
-                                              save_path = "data/07_enrichments_integration",
-                                              save_files = TRUE) {
+integrate_transcripto_gsea_ora_results <- function(gsea_obj, ora_obj,
+                                                   db_names = names(ref_background_genes),
+                                                   conditions = names(transcripto_ora_genelist),
+                                                   save_path = "data/07_enrichments_integration/02_transcriptomics_dataset/",
+                                                   save_files = TRUE) {
   if (save_files && !dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -912,8 +922,8 @@ integrate_aarhus_gsea_ora_results <- function(gsea_obj, ora_obj,
 # e/ Create "Master data" for the "Master volcano plot" ----
 create_enrichment_master_data <- function(
   gsea_obj, ora_obj,
-  db_names = names(ref_proteome),
-  conditions = names(ora_genelist),
+  db_names = names(ref_background_genes),
+  conditions = names(proteo_ora_genelist),
   padj_threshold = 0.05,
   min_genecount_cutoff = 5, # used only for an ORA significance flag (no dropping)
   save_path = "data/08_master_enrichments",
@@ -1092,8 +1102,8 @@ plot_dim_reduction <- function(df_obj, save_path = "figures/01_exploratory_analy
   analysis_type <- tolower(df_obj$analysis_type)
 
   if (analysis_type == "pca" && !is.null(df_obj$explained_var)) {
-    x_lab <- paste0("Principal Component 1 (", round(df_obj$explained_var[1], 1), "%)")
-    y_lab <- paste0("Principal Component 2 (", round(df_obj$explained_var[2], 1), "%)")
+    x_lab <- paste0("Principal Component 1 (", round(df_obj$explained_var[1], 1), "% var. explained)")
+    y_lab <- paste0("Principal Component 2 (", round(df_obj$explained_var[2], 1), "% var. explained)")
   } else if (analysis_type == "plsda" && !is.null(df_obj$explained_var)) {
     x_lab <- paste0("Component 1 (", round(df_obj$explained_var[1], 1), "%)")
     y_lab <- paste0("Component 2 (", round(df_obj$explained_var[2], 1), "%)")
@@ -1105,8 +1115,14 @@ plot_dim_reduction <- function(df_obj, save_path = "figures/01_exploratory_analy
     y_lab <- "Component 2"
   }
 
+  # Shared symmetric limits for x and y
+  max_abs <- max(abs(c(data$x, data$y)), na.rm = TRUE)
+  max_abs <- ceiling(max_abs / 10) * 10
+  lims <- c(-max_abs, max_abs)
+  axis_breaks <- seq(lims[1], lims[2], by = 10)
+
   final_plot <- ggplot(data, aes(x = x, y = y, color = group)) +
-    geom_point(size = 3) +
+    geom_point(size = 2.5) +
     # stat_ellipse(level = 0.95) +
     scale_color_manual(values = condition_colors) +
     labs(
@@ -1114,34 +1130,45 @@ plot_dim_reduction <- function(df_obj, save_path = "figures/01_exploratory_analy
       x = x_lab,
       y = y_lab
     ) +
+    scale_x_continuous(limits = lims, breaks = axis_breaks, expand = c(0, 0)) +
+    scale_y_continuous(limits = lims, breaks = axis_breaks, expand = c(0, 0)) +
+    coord_equal() +
     ggplot2::theme(
       plot.background = element_rect(fill = "#FFFFFF"),
-      panel.background = element_rect(fill = "#FFFFFF"),
-      plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt"),
-      plot.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(2)),
-      plot.subtitle = element_text(color = "black", family = "Helvetica Neue", hjust = 0, size = rel(1.2)),
+      panel.background = element_rect(fill = "#dee5e8"),
+      plot.margin = margin(t = 5, r = 5, b = 5, l = 5, unit = "pt"),
+      plot.title = element_text(
+        color = "black", family = "Helvetica Neue", face = "bold",
+        hjust = 0, size = rel(2), margin = margin(b = 4)
+      ),
+      plot.subtitle = element_text(
+        color = "black", family = "Helvetica Neue",
+        hjust = 0, size = rel(1.2), margin = margin(b = 2)
+      ),
       axis.title.x = element_text(color = "black", family = "Helvetica Neue", size = rel(1)),
       axis.text.x = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)),
       axis.title.y = element_text(color = "black", family = "Helvetica Neue", size = rel(1)),
       axis.text.y = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)),
       axis.line = element_line(color = "#5f5f5f", linewidth = 0.25),
       axis.ticks = element_line(color = "black", linewidth = 0.25),
-      panel.grid.major = element_line(color = "#EAEAEA", linetype = "dotted", linewidth = 0.25),
-      legend.box.margin = margin(0.1, 0.1, 0.1, 0.1),
+      panel.grid.major = element_line(color = "#EAEAEA", linetype = "solid", linewidth = 0.5),
+      panel.grid.minor = element_blank(),
       legend.position = "top",
-      legend.background = element_rect(fill = "#FFFFFF", color = "#5f5f5f", linewidth = 0.1),
-      legend.key.size = unit(0.5, "cm"),
+      legend.margin = margin(1, 1, 1, 1),
+      legend.box.margin = margin(1, 1, 1, 1),
+      legend.background = element_rect(fill = "#FFFFFF", linewidth = 0.1),
+      legend.key.size = unit(0.35, "cm"),
       legend.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", size = rel(1)),
       legend.text = element_text(color = "black", family = "Helvetica Neue", face = "italic", size = rel(0.9))
     )
-  # Save plot
+
   file_name <- paste0(matrix_type, "_", analysis_type, ".tiff")
   ggsave(
     filename = file_name,
     plot = final_plot,
     path = save_path,
-    width = 7.7,
-    height = 7.5,
+    width = 7,
+    height = 7,
     units = "in",
     dpi = 600,
     device = "tiff"
@@ -1152,112 +1179,7 @@ plot_dim_reduction <- function(df_obj, save_path = "figures/01_exploratory_analy
   return(final_plot)
 }
 
-create_heatmaps_aarhus <- function(
-  toptables,
-  vsd,
-  id_col = "ensembl_id",
-  symbol_col = "gene_id",
-  padj_cutoff = 0.05,
-  logFC_cutoff = 1,
-  top_n = 25,
-  save_path = "figures/02_differential_analysis/02_aarhus_mRNA"
-) {
-  if (!dir.exists(save_path)) {
-    dir.create(save_path, recursive = TRUE)
-  }
-
-  vsd_mat <- assay(vsd)
-  annotation_col <- as.data.frame(colData(vsd)[, "condition", drop = FALSE])
-  annotation_col <- annotation_col[colnames(vsd_mat), , drop = FALSE]
-
-  group_sizes <- table(annotation_col$condition)
-  gaps_col <- cumsum(group_sizes)[-length(group_sizes)]
-
-  res_list <- lapply(names(toptables), function(name) {
-    df <- toptables[[name]]
-
-    fc_col <- if ("logFC" %in% colnames(df)) {
-      "logFC"
-    } else if ("log2FoldChange" %in% colnames(df)) {
-      "log2FoldChange"
-    } else {
-      stop("No fold-change column found in ", name)
-    }
-
-    if (!id_col %in% colnames(df)) {
-      stop("Column '", id_col, "' not found in ", name)
-    }
-
-    if (!"padj" %in% colnames(df)) {
-      stop("Column 'padj' not found in ", name)
-    }
-
-    df_sig <- df %>%
-      dplyr::filter(
-        !is.na(.data[[fc_col]]),
-        !is.na(.data$padj),
-        !is.na(.data[[id_col]]),
-        abs(.data[[fc_col]]) > logFC_cutoff,
-        .data$padj < padj_cutoff
-      ) %>%
-      dplyr::arrange(.data$padj, dplyr::desc(abs(.data[[fc_col]]))) %>%
-      dplyr::slice_head(n = top_n)
-
-    if (nrow(df_sig) == 0) {
-      message("No significant genes for ", name)
-      return(NULL)
-    }
-
-    keep_ids <- df_sig[[id_col]][df_sig[[id_col]] %in% rownames(vsd_mat)]
-
-    if (length(keep_ids) == 0) {
-      message("No matching IDs found in vsd for ", name)
-      return(NULL)
-    }
-
-    df_sig <- df_sig[match(keep_ids, df_sig[[id_col]]), , drop = FALSE]
-    mat <- vsd_mat[keep_ids, , drop = FALSE]
-    mat <- mat[, rownames(annotation_col), drop = FALSE]
-
-    mat <- mat[apply(mat, 1, sd, na.rm = TRUE) > 0, , drop = FALSE]
-
-    if (nrow(mat) == 0) {
-      message("No variable genes left for ", name)
-      return(NULL)
-    }
-
-    if (symbol_col %in% colnames(df_sig)) {
-      rownames(mat) <- make.unique(as.character(df_sig[[symbol_col]][match(rownames(mat), df_sig[[id_col]])]))
-    }
-
-    mat_scaled <- t(scale(t(mat)))
-
-    pheatmap::pheatmap(
-      mat_scaled,
-      annotation_col = annotation_col,
-      annotation_names_col = FALSE,
-      cluster_rows = TRUE,
-      cluster_cols = FALSE,
-      gaps_col = gaps_col,
-      border_color = "grey85",
-      show_rownames = TRUE,
-      show_colnames = TRUE,
-      fontsize_row = 7,
-      main = paste0(name, " - top ", nrow(mat_scaled), " DE genes"),
-      filename = file.path(save_path, paste0("heatmap_", name, ".png")),
-      width = 6,
-      height = 8
-    )
-
-    message("heatmap_", name, ".png saved in: ", save_path)
-    invisible(mat_scaled)
-  })
-
-  names(res_list) <- names(toptables)
-  invisible(res_list)
-}
-
-create_volcano_plots <- function(toptables, save_path = "figures/02_differential_analysis/01_infinite_proteins") {
+create_volcano_plots <- function(toptables, save_path = "figures/02_differential_analysis/01_proteomics_datasets") {
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -1267,8 +1189,8 @@ create_volcano_plots <- function(toptables, save_path = "figures/02_differential
 
     # Create differential expression cutoffs
     df$diffexpressed <- "no"
-    df$diffexpressed[df$logFC_shrunk > logFC_volcano_cutoff & df$adj.P.Val < padj_volcano_cutoff] <- "up"
-    df$diffexpressed[df$logFC_shrunk < -logFC_volcano_cutoff & df$adj.P.Val < padj_volcano_cutoff] <- "down"
+    df$diffexpressed[df$logFC_shrunk > logFC_threshold & df$adj.P.Val < padj_threshold] <- "up"
+    df$diffexpressed[df$logFC_shrunk < -logFC_threshold & df$adj.P.Val < padj_threshold] <- "down"
 
     # Select the top 20 genes
     df_sorted <- df[order(-abs(df$logFC_shrunk)), ]
@@ -1283,8 +1205,8 @@ create_volcano_plots <- function(toptables, save_path = "figures/02_differential
     # Generate the volcano plot
     volcano_df <- ggplot(df, aes(x = logFC_shrunk, y = -log10(adj.P.Val), color = diffexpressed, label = gene_label)) +
       geom_point(size = 0.9, alpha = 0.5) +
-      geom_vline(xintercept = c(-logFC_volcano_cutoff, logFC_volcano_cutoff), col = "#dd9d6b", linetype = "dashed") +
-      geom_hline(yintercept = -log10(padj_volcano_cutoff), col = "#dd9d6b", linetype = "dashed") +
+      geom_vline(xintercept = c(-logFC_threshold, logFC_threshold), col = "#dd9d6b", linetype = "dashed") +
+      geom_hline(yintercept = -log10(padj_threshold), col = "#dd9d6b", linetype = "dashed") +
       scale_color_manual(
         name = "Differential abundance",
         values = c("down" = "#189392", "no" = "#dcdbc8", "up" = "#c43a50"),
@@ -1326,7 +1248,15 @@ create_volcano_plots <- function(toptables, save_path = "figures/02_differential
   })
 }
 
-plot_enrich_integration <- function(enrich_list, save_path = "figures/03_enrichments_integration") {
+plot_enrich_integration <- function(enrich_list, base_path = "figures/03_enrichments_integration/") {
+  obj_name <- deparse(substitute(enrich_list))
+
+  if (grepl("proteo", obj_name, ignore.case = TRUE)) {
+    save_path <- paste0(base_path, "01_proteomics_datasets")
+  } else {
+    save_path <- paste0(base_path, "02_transcriptomics_dataset")
+  }
+
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -1509,8 +1439,8 @@ create_codex_volcano <- function(enrich_category,
   toptable <- toptables[[toptable_name]] %>%
     mutate(
       diffexpressed = case_when(
-        logFC_shrunk > logFC_volcano_cutoff & adj.P.Val < padj_volcano_cutoff ~ "up-regulated",
-        logFC_shrunk < -logFC_volcano_cutoff & adj.P.Val < padj_volcano_cutoff ~ "down-regulated",
+        logFC_shrunk > logFC_threshold & adj.P.Val < padj_threshold ~ "up-regulated",
+        logFC_shrunk < -logFC_threshold & adj.P.Val < padj_threshold ~ "down-regulated",
         TRUE ~ "no significant difference"
       ),
       gene_label = ifelse(gene_id %in% core_gene_set, gene_id, NA),
@@ -1529,11 +1459,11 @@ create_codex_volcano <- function(enrich_category,
     geom_point(data = toptable %>% filter(is.na(gene_label)), size = 1, alpha = 0.20) +
     geom_point(data = toptable %>% filter(!is.na(gene_label)), size = 2, alpha = 1) +
     geom_vline(
-      xintercept = c(-logFC_volcano_cutoff, logFC_volcano_cutoff),
+      xintercept = c(-logFC_threshold, logFC_threshold),
       col = "#dd9d6b", linetype = "dashed"
     ) +
     geom_hline(
-      yintercept = -log10(padj_volcano_cutoff),
+      yintercept = -log10(padj_threshold),
       col = "#dd9d6b", linetype = "dashed"
     ) +
     geom_label_repel(
@@ -1749,11 +1679,11 @@ create_dae_volcano <- function(toptables,
                                use_shrunk = TRUE,
                                top_n = 20) {
   # Ensure expected global cutoffs exist (clear error if not)
-  if (!exists("logFC_volcano_cutoff", inherits = TRUE)) {
-    stop("logFC_volcano_cutoff is not defined in the environment.")
+  if (!exists("logFC_threshold", inherits = TRUE)) {
+    stop("logFC_threshold is not defined in the environment.")
   }
-  if (!exists("padj_volcano_cutoff", inherits = TRUE)) {
-    stop("padj_volcano_cutoff is not defined in the environment.")
+  if (!exists("padj_threshold", inherits = TRUE)) {
+    stop("padj_threshold is not defined in the environment.")
   }
 
   # Define axis limits used below
@@ -1782,8 +1712,8 @@ create_dae_volcano <- function(toptables,
       padj_clamped = pmax(pmin(padj, 1), 1e-300),
       mlog10 = -log10(padj_clamped),
       diffexpressed = dplyr::case_when(
-        is.finite(lfc) & is.finite(padj) & lfc > logFC_volcano_cutoff & padj < padj_volcano_cutoff ~ "up",
-        is.finite(lfc) & is.finite(padj) & lfc < -logFC_volcano_cutoff & padj < padj_volcano_cutoff ~ "down",
+        is.finite(lfc) & is.finite(padj) & lfc > logFC_threshold & padj < padj_threshold ~ "up",
+        is.finite(lfc) & is.finite(padj) & lfc < -logFC_threshold & padj < padj_threshold ~ "down",
         TRUE ~ "no"
       ),
       hover_text = paste0(
@@ -1810,11 +1740,11 @@ create_dae_volcano <- function(toptables,
   ) +
     ggplot2::geom_point(size = 0.9, alpha = 0.5) +
     ggplot2::geom_vline(
-      xintercept = c(-logFC_volcano_cutoff, logFC_volcano_cutoff),
+      xintercept = c(-logFC_threshold, logFC_threshold),
       col = "#dd9d6b", linetype = "dashed"
     ) +
     ggplot2::geom_hline(
-      yintercept = -log10(padj_volcano_cutoff),
+      yintercept = -log10(padj_threshold),
       col = "#dd9d6b", linetype = "dashed"
     ) +
     ggplot2::scale_color_manual(
@@ -1872,7 +1802,110 @@ create_dae_volcano <- function(toptables,
   list(plot = volcano_plot, data = df, lfc_col = lfc_col)
 }
 
-create_volcano_aarhus <- function(toptables, save_path = "figures/02_differential_analysis/02_aarhus_mRNA") {
+create_heatmaps_transcripto <- function(
+  toptables,
+  vsd,
+  id_col = "ensembl_id",
+  symbol_col = "gene_id",
+  top_n = 25,
+  save_path = "figures/02_differential_analysis/02_transcriptomics_dataset/"
+) {
+  if (!dir.exists(save_path)) {
+    dir.create(save_path, recursive = TRUE)
+  }
+
+  vsd_mat <- assay(vsd)
+  annotation_col <- as.data.frame(colData(vsd)[, "condition", drop = FALSE])
+  annotation_col <- annotation_col[colnames(vsd_mat), , drop = FALSE]
+
+  group_sizes <- table(annotation_col$condition)
+  gaps_col <- cumsum(group_sizes)[-length(group_sizes)]
+
+  res_list <- lapply(names(toptables), function(name) {
+    df <- toptables[[name]]
+
+    fc_col <- if ("logFC" %in% colnames(df)) {
+      "logFC"
+    } else if ("log2FoldChange" %in% colnames(df)) {
+      "log2FoldChange"
+    } else {
+      stop("No fold-change column found in ", name)
+    }
+
+    if (!id_col %in% colnames(df)) {
+      stop("Column '", id_col, "' not found in ", name)
+    }
+
+    if (!"padj" %in% colnames(df)) {
+      stop("Column 'padj' not found in ", name)
+    }
+
+    df_sig <- df %>%
+      dplyr::filter(
+        !is.na(.data[[fc_col]]),
+        !is.na(.data$padj),
+        !is.na(.data[[id_col]]),
+        abs(.data[[fc_col]]) > logFC_threshold,
+        .data$padj < padj_threshold
+      ) %>%
+      dplyr::arrange(.data$padj, dplyr::desc(abs(.data[[fc_col]]))) %>%
+      dplyr::slice_head(n = top_n)
+
+    if (nrow(df_sig) == 0) {
+      message("No significant genes for ", name)
+      return(NULL)
+    }
+
+    keep_ids <- df_sig[[id_col]][df_sig[[id_col]] %in% rownames(vsd_mat)]
+
+    if (length(keep_ids) == 0) {
+      message("No matching IDs found in vsd for ", name)
+      return(NULL)
+    }
+
+    df_sig <- df_sig[match(keep_ids, df_sig[[id_col]]), , drop = FALSE]
+    mat <- vsd_mat[keep_ids, , drop = FALSE]
+    mat <- mat[, rownames(annotation_col), drop = FALSE]
+
+    mat <- mat[apply(mat, 1, sd, na.rm = TRUE) > 0, , drop = FALSE]
+
+    if (nrow(mat) == 0) {
+      message("No variable genes left for ", name)
+      return(NULL)
+    }
+
+    if (symbol_col %in% colnames(df_sig)) {
+      rownames(mat) <- make.unique(as.character(df_sig[[symbol_col]][match(rownames(mat), df_sig[[id_col]])]))
+    }
+
+    mat_scaled <- t(scale(t(mat)))
+
+    pheatmap::pheatmap(
+      mat_scaled,
+      annotation_col = annotation_col,
+      annotation_names_col = FALSE,
+      cluster_rows = TRUE,
+      cluster_cols = FALSE,
+      gaps_col = gaps_col,
+      border_color = "grey85",
+      show_rownames = TRUE,
+      show_colnames = TRUE,
+      fontsize_row = 7,
+      main = paste0(name, " - top ", nrow(mat_scaled), " DE genes"),
+      filename = file.path(save_path, paste0("heatmap_", name, ".png")),
+      width = 6,
+      height = 8
+    )
+
+    message("heatmap_", name, ".png saved in: ", save_path)
+    invisible(mat_scaled)
+  })
+
+  names(res_list) <- names(toptables)
+  invisible(res_list)
+}
+
+create_volcano_transcripto <- function(toptables, save_path = "figures/02_differential_analysis/02_transcriptomics_dataset") {
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -1883,16 +1916,16 @@ create_volcano_aarhus <- function(toptables, save_path = "figures/02_differentia
 
     # Create differential expression cutoffs
     df$diffexpressed <- "no"
-    df$diffexpressed[df$logFC > logFC_volcano_cutoff & df$padj < padj_volcano_cutoff] <- "up"
-    df$diffexpressed[df$logFC < -logFC_volcano_cutoff & df$padj < padj_volcano_cutoff] <- "down"
+    df$diffexpressed[df$logFC > logFC_threshold & df$padj < padj_threshold] <- "up"
+    df$diffexpressed[df$logFC < -logFC_threshold & df$padj < padj_threshold] <- "down"
 
     # Select the top 20 genes
     df_sig <- df %>%
       dplyr::filter(
         !is.na(logFC),
         !is.na(padj),
-        abs(logFC) > logFC_volcano_cutoff,
-        padj < padj_volcano_cutoff
+        abs(logFC) > logFC_threshold,
+        padj < padj_threshold
       ) %>%
       dplyr::arrange(desc(abs(logFC)))
 
@@ -1907,8 +1940,8 @@ create_volcano_aarhus <- function(toptables, save_path = "figures/02_differentia
     # Generate the volcano plot
     volcano_df <- ggplot(df, aes(x = logFC, y = -log10(padj), color = diffexpressed, label = gene_label)) +
       geom_point(size = 0.9, alpha = 0.5) +
-      geom_vline(xintercept = c(-logFC_volcano_cutoff, logFC_volcano_cutoff), col = "#dd9d6b", linetype = "dashed") +
-      geom_hline(yintercept = -log10(padj_volcano_cutoff), col = "#dd9d6b", linetype = "dashed") +
+      geom_vline(xintercept = c(-logFC_threshold, logFC_threshold), col = "#dd9d6b", linetype = "dashed") +
+      geom_hline(yintercept = -log10(padj_threshold), col = "#dd9d6b", linetype = "dashed") +
       scale_color_manual(
         name = "Differential abundance",
         values = c("down" = "#189392", "no" = "#dcdbc8", "up" = "#c43a50"),

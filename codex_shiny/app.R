@@ -16,7 +16,7 @@ gc()
 set.seed(12345)
 
 # Source functions / objects
-source(file = "scripts/00_functions.R")
+source(file = "scripts/01_functions.R")
 
 app_version <- "v1.3.1"
 
@@ -138,7 +138,7 @@ ui <- page_fillable(
           pickerInput(
             "db_name",
             tags$strong("1️⃣ Reference database"),
-            choices = names(ref_proteome)
+            choices = names(ref_background_genes)
           ),
           hr(),
           pickerInput(
@@ -183,7 +183,7 @@ ui <- page_fillable(
 
 # Server ----
 server <- function(input, output, session) {
-  padj_threshold <- 0.05
+  padj_threshold <- padj_threshold
 
   rv <- reactiveValues(
     enrich_df = NULL,
