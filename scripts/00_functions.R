@@ -148,35 +148,46 @@ compute_pca <- function(df, matrix_type, save_path = "figures/01_exploratory_ana
   if (matrix_type == "cytoplasm") {
     NS <- cytoNS
     ATAp <- cytoATAp
-  } else if (matrix_type == "nucleus") {
+    prefix <- "cyto"
+  } else {
     NS <- nuclNS
     ATAp <- nuclATAp
+    prefix <- "nucl"
   }
 
-  group <- factor(c(
-    rep("dcSSc_ATAp", length(ATAp)),
-    rep("dcSSc_ATAn", length(ATAn)),
-    rep("lcSSc_ACA", length(ACA)),
-    rep("HC", length(HC)),
-    rep("NS", length(NS))
-  ))
+  group <- factor(
+    c(
+      rep("dcSSc_ATAp", length(ATAp)),
+      rep("dcSSc_ATAn", length(ATAn)),
+      rep("lcSSc_ACA", length(ACA)),
+      rep("HC", length(HC)),
+      rep("NS", length(NS))
+    ),
+    levels = c("dcSSc_ATAp", "dcSSc_ATAn", "lcSSc_ACA", "HC", "NS")
+  )
 
   matrix <- as.matrix(df)
-  matrix_pca <- pca(t(matrix), ncomp = 3, center = TRUE, scale = TRUE)
+  matrix_pca <- pca(t(matrix), ncomp = 3, center = TRUE, scale = FALSE)
 
-  plot_list <- plotIndiv(matrix_pca,
+  explained_var <- 100 * matrix_pca$prop_expl_var$X[1:2]
+  names(explained_var) <- paste0(prefix, "_PC", 1:2)
+
+  coords <- as.data.frame(matrix_pca$variates$X[, 1:2, drop = FALSE])
+  colnames(coords) <- c("x", "y")
+  coords$group <- group
+
+  plot_list <- plotIndiv(
+    matrix_pca,
     group = group,
     ind.names = FALSE,
     legend = TRUE,
-    ellipse = TRUE,
+    ellipse = FALSE,
     comp = 1:2,
     title = paste(matrix_type, "/", "PCA - comp. 1~2"),
     gg = TRUE
   )
 
-  pca_plot <- plot_list$graph
-
-  final_plot <- pca_plot +
+  final_plot <- plot_list$graph +
     ggplot2::theme(
       plot.background = element_rect(fill = "#F0F0F0", color = NA),
       panel.background = element_rect(fill = "#FFFFFF", color = NA),
@@ -194,7 +205,13 @@ compute_pca <- function(df, matrix_type, save_path = "figures/01_exploratory_ana
       strip.text = element_text(color = "white", face = "bold", size = rel(1))
     )
 
-  return(final_plot)
+  return(list(
+    plot = final_plot,
+    data = coords,
+    explained_var = explained_var,
+    matrix_type = matrix_type,
+    analysis_type = "pca"
+  ))
 }
 
 compute_plsda <- function(df, matrix_type, save_path = "figures/01_exploratory_analysis") {
@@ -210,34 +227,49 @@ compute_plsda <- function(df, matrix_type, save_path = "figures/01_exploratory_a
   if (matrix_type == "cytoplasm") {
     NS <- cytoNS
     ATAp <- cytoATAp
-  } else if (matrix_type == "nucleus") {
+    prefix <- "cyto"
+  } else {
     NS <- nuclNS
     ATAp <- nuclATAp
+    prefix <- "nucl"
   }
 
-  group <- factor(c(
-    rep("dcSSc_ATAp", length(ATAp)),
-    rep("dcSSc_ATAn", length(ATAn)),
-    rep("lcSSc_ACA", length(ACA)),
-    rep("HC", length(HC)),
-    rep("NS", length(NS))
-  ))
+  group <- factor(
+    c(
+      rep("dcSSc_ATAp", length(ATAp)),
+      rep("dcSSc_ATAn", length(ATAn)),
+      rep("lcSSc_ACA", length(ACA)),
+      rep("HC", length(HC)),
+      rep("NS", length(NS))
+    ),
+    levels = c("dcSSc_ATAp", "dcSSc_ATAn", "lcSSc_ACA", "HC", "NS")
+  )
 
   matrix <- as.matrix(df)
   matrix_plsda <- plsda(t(matrix), group, ncomp = 3, scale = TRUE)
 
-  plot_list <- plotIndiv(matrix_plsda,
+  explained_var <- NULL
+  if (!is.null(matrix_plsda$prop_expl_var$X)) {
+    explained_var <- 100 * matrix_plsda$prop_expl_var$X[1:2]
+    names(explained_var) <- paste0(prefix, "_comp", 1:2)
+  }
+
+  coords <- as.data.frame(matrix_plsda$variates$X[, 1:2, drop = FALSE])
+  colnames(coords) <- c("x", "y")
+  coords$group <- group
+
+  plot_list <- plotIndiv(
+    matrix_plsda,
     group = group,
     ind.names = FALSE,
     legend = TRUE,
-    ellipse = TRUE,
+    ellipse = FALSE,
+    comp = 1:2,
     title = paste(matrix_type, "/", "PLS-DA - Conf. ellipses 95%"),
     gg = TRUE
   )
 
-  plsda_plot <- plot_list$graph
-
-  final_plot <- plsda_plot +
+  final_plot <- plot_list$graph +
     ggplot2::theme(
       plot.background = element_rect(fill = "#F0F0F0", color = NA),
       panel.background = element_rect(fill = "#FFFFFF", color = NA),
@@ -255,20 +287,13 @@ compute_plsda <- function(df, matrix_type, save_path = "figures/01_exploratory_a
       strip.text = element_text(color = "white", face = "bold", size = rel(1))
     )
 
-  # # Save file
-  # file_name <- paste0("plsda_", matrix_type, ".png")
-  # ggsave(
-  #   filename = file_name,
-  #   plot = final_plot,
-  #   path = save_path,
-  #   width = 7.7,
-  #   height = 7.5,
-  #   units = "in",
-  #   dpi = 600
-  # )
-  #
-  # message(paste(file_name, "saved in:", save_path))
-  # return(plsda_plot)
+  return(list(
+    plot = final_plot,
+    data = coords,
+    explained_var = explained_var,
+    matrix_type = matrix_type,
+    analysis_type = "plsda"
+  ))
 }
 
 # 3/ Differential analysis functions -----
@@ -1042,11 +1067,11 @@ publication_theme <- {
 }
 
 condition_colors <- c(
-  "dcSSc_ATAp" = "#73A9E5",
-  "dcSSc_ATAn" = "#88D0E5",
-  "lcSSc_ACA"  = "#F71735",
-  "HC"         = "#C8C6BD",
-  "NS"         = "#DADADA"
+  "dcSSc_ATAp" = "#d31f11",
+  "dcSSc_ATAn" = "#f47a00",
+  "lcSSc_ACA"  = "#007191",
+  "HC"         = "#50ad9f",
+  "NS"         = "#595959"
 )
 
 pathways_colors <- c(
@@ -1057,38 +1082,44 @@ pathways_colors <- c(
   "Other"                            = "#7B3F97"
 )
 
-plot_dim_reduction <- function(df, save_path = "figures/01_exploratory_analysis") {
+plot_dim_reduction <- function(df_obj, save_path = "figures/01_exploratory_analysis") {
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
 
-  # Extract object name
-  df_name <- deparse(substitute(df))
-  matrix_type <- sub("_.*", "", df_name)
-  analysis_type <- sub(".*_", "", df_name)
+  data <- df_obj$data
+  matrix_type <- df_obj$matrix_type
+  analysis_type <- tolower(df_obj$analysis_type)
 
-  # Extract data
-  data <- df$data
+  if (analysis_type == "pca" && !is.null(df_obj$explained_var)) {
+    x_lab <- paste0("Principal Component 1 (", round(df_obj$explained_var[1], 1), "%)")
+    y_lab <- paste0("Principal Component 2 (", round(df_obj$explained_var[2], 1), "%)")
+  } else if (analysis_type == "plsda" && !is.null(df_obj$explained_var)) {
+    x_lab <- paste0("Component 1 (", round(df_obj$explained_var[1], 1), "%)")
+    y_lab <- paste0("Component 2 (", round(df_obj$explained_var[2], 1), "%)")
+  } else if (analysis_type == "pca") {
+    x_lab <- "Principal Component 1"
+    y_lab <- "Principal Component 2"
+  } else {
+    x_lab <- "Component 1"
+    y_lab <- "Component 2"
+  }
 
-  # Build plot
   final_plot <- ggplot(data, aes(x = x, y = y, color = group)) +
     geom_point(size = 3) +
-    stat_ellipse(level = 0.95) +
+    # stat_ellipse(level = 0.95) +
     scale_color_manual(values = condition_colors) +
     labs(
       title = paste(toupper(analysis_type), "-", matrix_type),
-      x = "Principal Component 1",
-      y = "Principal Component 2"
+      x = x_lab,
+      y = y_lab
     ) +
     ggplot2::theme(
-      # General aspect
       plot.background = element_rect(fill = "#FFFFFF"),
       panel.background = element_rect(fill = "#FFFFFF"),
       plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt"),
       plot.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(2)),
       plot.subtitle = element_text(color = "black", family = "Helvetica Neue", hjust = 0, size = rel(1.2)),
-
-      # Axis
       axis.title.x = element_text(color = "black", family = "Helvetica Neue", size = rel(1)),
       axis.text.x = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)),
       axis.title.y = element_text(color = "black", family = "Helvetica Neue", size = rel(1)),
@@ -1096,16 +1127,13 @@ plot_dim_reduction <- function(df, save_path = "figures/01_exploratory_analysis"
       axis.line = element_line(color = "#5f5f5f", linewidth = 0.25),
       axis.ticks = element_line(color = "black", linewidth = 0.25),
       panel.grid.major = element_line(color = "#EAEAEA", linetype = "dotted", linewidth = 0.25),
-
-      # Legend
       legend.box.margin = margin(0.1, 0.1, 0.1, 0.1),
-      legend.position = "bottom",
+      legend.position = "top",
       legend.background = element_rect(fill = "#FFFFFF", color = "#5f5f5f", linewidth = 0.1),
       legend.key.size = unit(0.5, "cm"),
       legend.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", size = rel(1)),
       legend.text = element_text(color = "black", family = "Helvetica Neue", face = "italic", size = rel(0.9))
     )
-
   # Save plot
   file_name <- paste0(matrix_type, "_", analysis_type, ".tiff")
   ggsave(
@@ -1120,6 +1148,7 @@ plot_dim_reduction <- function(df, save_path = "figures/01_exploratory_analysis"
   )
 
   message(paste(file_name, "saved in:", save_path))
+
   return(final_plot)
 }
 
