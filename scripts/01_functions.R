@@ -116,7 +116,7 @@ clean_gmt <- function(file_path) {
     return(list(clean_gmt))
 }
 
-clean_evapass <- function(df) {
+clean_evapath <- function(df) {
   # Handle missing gene ids
   df <- df[df$Genes != "" & !is.na(df$Genes), ]
 
@@ -131,10 +131,41 @@ clean_evapass <- function(df) {
   return(clean_df)
 }
 
+clean_endopath <- function(df) {
+  df$ensembl_id <- rownames(df)
+  annot <- AnnotationDbi::select(
+    org.Hs.eg.db,
+    keys = df$ensembl_id,
+    keytype = "ENSEMBL",
+    columns = c("ENSEMBL", "SYMBOL")
+  )
+
+  df <- df %>%
+    dplyr::left_join(annot, by = c("ensembl_id" = "ENSEMBL"))
+
+  df$SYMBOL[trimws(df$SYMBOL) == ""] <- NA
+
+  df <- df %>%
+    dplyr::filter(!is.na(SYMBOL)) %>%
+    dplyr::rename(gene_id = SYMBOL)
+
+  df <- df[, c("ensembl_id", "gene_id")]
+
+  return(df)
+}
+
 filter_xp_proteome <- function(ref_list) {
   lapply(names(ref_list), function(name) {
     df <- ref_list[[name]]
     df_filtered <- df[df$gene %in% proteo_filter, ]
+    return(df_filtered)
+  })
+}
+
+filter_xp_transcriptome <- function(ref_list) {
+  lapply(names(ref_list), function(name) {
+    df <- ref_list[[name]]
+    df_filtered <- df[df$gene %in% transcripto_filter, ]
     return(df_filtered)
   })
 }
@@ -302,7 +333,7 @@ compute_plsda <- function(df, matrix_type, save_path = "figures/01_exploratory_a
 }
 
 # 3/ Differential analysis functions -----
-compute_diff_analysis <- function(df, matrix_type, save_path = "data/01_limma_toptables/") {
+compute_diff_analysis <- function(df, matrix_type, save_path = "data/01_proteo_toptables/") {
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -544,7 +575,15 @@ categorize_pathway <- function(description) {
 
 
 # b/ GSEA ----
-compute_gsea <- function(ref_background, gene_list, save_path = "data/02_gsea_results_raw") {
+compute_gsea <- function(ref_background, gene_list, base_path = "data/02_gsea_results_raw/") {
+  obj_name <- deparse(substitute(gene_list))
+
+  if (grepl("proteo", obj_name, ignore.case = TRUE)) {
+    save_path <- paste0(base_path, "01_proteomics_datasets")
+  } else {
+    save_path <- paste0(base_path, "02_transcriptomics_dataset")
+  }
+
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -600,7 +639,15 @@ compute_gsea <- function(ref_background, gene_list, save_path = "data/02_gsea_re
   return(gsea_res)
 }
 
-filter_gsea_results <- function(result_list, save_path = "data/03_gsea_results_filtered") {
+filter_gsea_results <- function(result_list, base_path = "data/03_gsea_results_filtered/") {
+  obj_name <- deparse(substitute(result_list))
+
+  if (grepl("proteo", obj_name, ignore.case = TRUE)) {
+    save_path <- paste0(base_path, "01_proteomics_datasets")
+  } else {
+    save_path <- paste0(base_path, "02_transcriptomics_dataset")
+  }
+
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -650,7 +697,15 @@ filter_gsea_results <- function(result_list, save_path = "data/03_gsea_results_f
 }
 
 # c/ ORA ----
-compute_ora <- function(xp_background, gene_list, save_path = "data/04_ora_results_raw") {
+compute_ora <- function(xp_background, gene_list, base_path = "data/04_ora_results_raw/") {
+  obj_name <- deparse(substitute(gene_list))
+
+  if (grepl("proteo", obj_name, ignore.case = TRUE)) {
+    save_path <- paste0(base_path, "01_proteomics_datasets")
+  } else {
+    save_path <- paste0(base_path, "02_transcriptomics_dataset")
+  }
+
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -703,7 +758,15 @@ compute_ora <- function(xp_background, gene_list, save_path = "data/04_ora_resul
   return(ora_res)
 }
 
-filter_ora_results <- function(result_list, save_path = "data/05_ora_results_filtered") {
+filter_ora_results <- function(result_list, base_path = "data/05_ora_results_filtered/") {
+  obj_name <- deparse(substitute(result_list))
+
+  if (grepl("proteo", obj_name, ignore.case = TRUE)) {
+    save_path <- paste0(base_path, "01_proteomics_datasets")
+  } else {
+    save_path <- paste0(base_path, "02_transcriptomics_dataset")
+  }
+
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -754,7 +817,15 @@ filter_ora_results <- function(result_list, save_path = "data/05_ora_results_fil
 }
 
 # d/ combining analyses ----
-merge_enrichment_results <- function(result_list, enrich_type, save_path = "data/06_enrichment_results_merged") {
+merge_enrichment_results <- function(result_list, enrich_type, base_path = "data/06_enrichment_merged") {
+  obj_name <- deparse(substitute(result_list))
+
+  if (grepl("proteo", obj_name, ignore.case = TRUE)) {
+    save_path <- paste0(base_path, "01_proteomics_datasets")
+  } else {
+    save_path <- paste0(base_path, "02_transcriptomics_dataset")
+  }
+
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -799,11 +870,11 @@ merge_enrichment_results <- function(result_list, enrich_type, save_path = "data
   return(merged_results)
 }
 
-integrate_gsea_ora_results <- function(gsea_obj, ora_obj,
-                                       db_names = names(ref_background_genes),
-                                       conditions = names(proteo_ora_genelist),
-                                       save_path = "data/07_enrichments_integration/01_proteomics_dataset/",
-                                       save_files = TRUE) {
+integrate_proteo_enrich_res <- function(gsea_obj, ora_obj,
+                                        db_names = names(ref_background_genes),
+                                        conditions = names(proteo_ora_genelist),
+                                        save_path = "data/07_enrichments_integration/01_proteomics_dataset/",
+                                        save_files = TRUE) {
   if (save_files && !dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -859,11 +930,11 @@ integrate_gsea_ora_results <- function(gsea_obj, ora_obj,
   return(results_list)
 }
 
-integrate_transcripto_gsea_ora_results <- function(gsea_obj, ora_obj,
-                                                   db_names = names(ref_background_genes),
-                                                   conditions = names(transcripto_ora_genelist),
-                                                   save_path = "data/07_enrichments_integration/02_transcriptomics_dataset/",
-                                                   save_files = TRUE) {
+integrate_transcripto_enrich_res <- function(gsea_obj, ora_obj,
+                                             db_names = names(ref_background_genes),
+                                             conditions = names(transcripto_ora_genelist),
+                                             save_path = "data/07_enrichments_integration/02_transcriptomics_dataset/",
+                                             save_files = TRUE) {
   if (save_files && !dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -920,13 +991,13 @@ integrate_transcripto_gsea_ora_results <- function(gsea_obj, ora_obj,
 }
 
 # e/ Create "Master data" for the "Master volcano plot" ----
-create_enrichment_master_data <- function(
+process_codex_data <- function(
   gsea_obj, ora_obj,
   db_names = names(ref_background_genes),
   conditions = names(proteo_ora_genelist),
   padj_threshold = 0.05,
   min_genecount_cutoff = 5, # used only for an ORA significance flag (no dropping)
-  save_path = "data/08_master_enrichments",
+  save_path = "data/08_codex_data",
   save_files = TRUE
 ) {
   if (isTRUE(save_files) && !dir.exists(save_path)) {
@@ -1092,7 +1163,15 @@ pathways_colors <- c(
   "Other"                            = "#7B3F97"
 )
 
-plot_dim_reduction <- function(df_obj, save_path = "figures/01_exploratory_analysis") {
+plot_dim_reduction <- function(df_obj, base_path = "figures/01_exploratory_analysis/") {
+  obj_name <- deparse(substitute(df_obj))
+
+  if (grepl("proteo", obj_name, ignore.case = TRUE)) {
+    save_path <- paste0(base_path, "01_proteomics_datasets")
+  } else {
+    save_path <- paste0(base_path, "02_transcriptomics_dataset")
+  }
+
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -1402,7 +1481,7 @@ create_codex_volcano <- function(enrich_category,
                                  cell_compartment,
                                  condition,
                                  pathway_description,
-                                 save_path = "figures/") {
+                                 save_path = "figures/10_user_generated/") {
   toptable_name <- paste0(cell_compartment, "_", condition, "_HC")
   enrich_name <- paste0(db_name, "_", cell_compartment, "_", condition)
 
@@ -1528,7 +1607,7 @@ create_codex_enrichment <- function(enrich_category,
                                     cell_compartment,
                                     condition,
                                     pathway_description,
-                                    save_path = "figures/",
+                                    save_path = "figures/10_user_generated/",
                                     padj_threshold = 0.05) {
   enrich_name <- paste0(db_name, "_", cell_compartment, "_", condition)
   df <- master_enrich_data[[enrich_name]]

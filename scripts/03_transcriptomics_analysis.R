@@ -139,30 +139,49 @@ transcripto_toptables <- lapply(transcripto_res, map_gene_symbols)
 
 ## e. Visualization ----
 create_volcano_transcripto(transcripto_toptables)
-
 create_heatmaps_transcripto(
   toptables = transcripto_toptables,
   vsd = transcripto_vsd
 )
 
-# ----- 6. Enrichment analysis -----
-# Set genelist for GSEA & gene vector for ORA
+# ----- 4. Gene Set Enrichment Analysis (GSEA) -----
+## a. Process 'transcripto_toptables' object into ranked lists (based on 't' value) ----
 transcripto_gsea_genelist <- clean_toptables_for_gsea(transcripto_toptables) %>%
   setNames(names(transcripto_toptables))
 
-transcripto_ora_genelist <- clean_toptables_for_ora(transcripto_toptables) %>%
-  setNames(names(transcripto_toptables))
-
-# Run GSEA & filter results ---
+## b. Run GSEA for each condition vs. 'ref_background_genes' ----
 transcripto_gsea_results <- compute_gsea(ref_background_genes, transcripto_gsea_genelist)
 transcripto_gsea_results_filtered <- filter_gsea_results(transcripto_gsea_results)
 transcripto_gsea_pathways_merged <- merge_enrichment_results(result_list = transcripto_gsea_results_filtered, enrich_type = "gsea")
 
-# Run ORA & filter results ---
-transcripto_ora_results <- compute_ora(xp_background_proteo, transcripto_ora_genelist)
+# ----- 5. Over-Representation Analysis (ORA) -----
+## a. Process reference background genes ----
+transcripto_endopath <- fread("data/00_raw/transcripto_endopath_vst.csv")
+rownames(transcripto_endopath) <- transcripto_endopath$V1
+transcripto_endopath <- transcripto_endopath %>%
+  dplyr::select(-V1)
+
+transcripto_endopath <- clean_endopath(transcripto_endopath)
+
+transcripto_filter <- unique(unlist(list(
+  transcripto_toptables[["transcripto_ATA_vs_HC"]]$gene_id,
+  transcripto_toptables[["transcripto_ATA_vs_IFNa"]]$gene_id,
+  transcripto_endopath$gene_id
+)))
+
+xp_background_transcripto <- filter_xp_transcriptome(ref_background_genes)
+names(xp_background_transcripto) <- gsub("_v2026_1_hs_symbols", "", tools::file_path_sans_ext(basename(raw_gmt)))
+
+## b. Process 'transcripto_toptables' object into unranked significant vectors (based on padj_threshold) ----
+transcripto_ora_genelist <- clean_toptables_for_ora(transcripto_toptables) %>%
+  setNames(names(transcripto_toptables))
+
+
+## c. Run ORA for each condition vs. 'xp_background_transcripto' ----
+transcripto_ora_results <- compute_ora(xp_background_transcripto, transcripto_ora_genelist)
 transcripto_ora_results_filtered <- filter_ora_results(transcripto_ora_results)
 transcripto_ora_pathways_merged <- merge_enrichment_results(result_list = transcripto_ora_results_filtered, enrich_type = "ora")
 
-# Merge enrichment results ---
-transcripto_enrich_integration <- integrate_transcripto_gsea_ora_results(transcripto_gsea_results, transcripto_ora_results)
+# ----- 7. Cross-enrichment merging -----
+transcripto_enrich_integration <- integrate_transcripto_enrich_res(transcripto_gsea_results, transcripto_ora_results)
 plot_enrich_integration(transcripto_enrich_integration)

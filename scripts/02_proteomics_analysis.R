@@ -28,7 +28,7 @@ logFC_threshold <- 1
 ## d. Enrichment specific settings ----
 padj_enrichment_cutoff <- 1
 min_genecount_cutoff <- 15
-max_genecount_cutoff <- 200
+max_genecount_cutoff <- 250
 permutations_gsea <- 50000
 multiple_testing_correction <- "BH"
 eps_limit_gsea <- 1e-30
@@ -114,18 +114,18 @@ proteo_toptables <- lapply(toptables_path, import_toptables) %>%
 create_volcano_plots(proteo_toptables)
 
 ## b. Pairwised comparisons across all biological conditions ----
-cytoplasm_extended_da <- compute_extended_diff_analysis(df = proteo_cyto_matrix, matrix_type = "cytoplasm")
-nucleus_extended_da <- compute_extended_diff_analysis(df = proteo_nucl_matrix, matrix_type = "nucleus")
+proteo_cyto_extended_da <- compute_extended_diff_analysis(df = proteo_cyto_matrix, matrix_type = "cytoplasm")
+proteo_nucl_extended_da <- compute_extended_diff_analysis(df = proteo_nucl_matrix, matrix_type = "nucleus")
 
-extended_toptables_path <- list.files(
+toptables_path_extended <- list.files(
   path = "data/09_extended_toptables/",
   pattern = "*.xlsx",
   full.names = TRUE
 )
 
 ### Toptables needed for the Differential Analysis Explorer (DAE) Shiny app ---
-extended_toptables <- lapply(extended_toptables_path, import_toptables) %>%
-  setNames(tools::file_path_sans_ext(basename(extended_toptables_path)))
+proteo_toptables_extended <- lapply(toptables_path_extended, import_toptables) %>%
+  setNames(tools::file_path_sans_ext(basename(toptables_path_extended)))
 
 
 # ----- 5. Gene Set Enrichment Analysis (GSEA) -----
@@ -146,7 +146,7 @@ names(ref_background_genes) <- gsub(
 proteo_gsea_genelist <- clean_toptables_for_gsea(proteo_toptables)
 names(proteo_gsea_genelist) <- gsub("_HC", "", tools::file_path_sans_ext(basename(toptables_path)))
 
-## c. Run GSEA for each condition vs. 'background_genes' ----
+## c. Run GSEA for each condition vs. 'ref_background_genes' ----
 proteo_gsea_res <- compute_gsea(ref_background_genes, proteo_gsea_genelist)
 proteo_gsea_res_filtered <- filter_gsea_results(proteo_gsea_res)
 proteo_pathways_merged <- merge_enrichment_results(
@@ -157,13 +157,13 @@ proteo_pathways_merged <- merge_enrichment_results(
 
 # ----- 6. Over-Representation Analysis (ORA) -----
 ## a. Process reference background genes ----
-proteo_evapass <- as.data.frame(proteo_raw$proteo_evapass_lfq)
-proteo_evapass <- clean_evapass(proteo_evapass)
+proteo_evapath <- as.data.frame(proteo_raw$proteo_evapath_lfq)
+proteo_evapath <- clean_evapath(proteo_evapath)
 
 proteo_filter <- unique(unlist(list(
   rownames(proteo_nucleus),
   rownames(proteo_cytoplasm),
-  proteo_evapass$Genes
+  proteo_evapath$Genes
 )))
 
 xp_background_proteo <- filter_xp_proteome(ref_background_genes)
@@ -173,15 +173,15 @@ names(xp_background_proteo) <- gsub("_v2026_1_hs_symbols", "", tools::file_path_
 proteo_ora_genelist <- clean_toptables_for_ora(proteo_toptables)
 names(proteo_ora_genelist) <- gsub("_HC", "", tools::file_path_sans_ext(basename(toptables_path)))
 
-## c. Run ORA for each condition vs. 'xp_proteome' ----
+## c. Run ORA for each condition vs. 'xp_background_proteo' ----
 proteo_ora_res <- compute_ora(xp_background_proteo, proteo_ora_genelist)
 proteo_ora_res_filtered <- filter_ora_results(proteo_ora_res)
 proteo_ora_pathways_merged <- merge_enrichment_results(result_list = proteo_ora_res_filtered, enrich_type = "ora")
 
 
 # ----- 7. Cross-enrichment merging -----
-proteo_enrich_integration <- integrate_gsea_ora_results(proteo_gsea_res, proteo_ora_res)
+proteo_enrich_integration <- integrate_proteo_enrich_res(proteo_gsea_res, proteo_ora_res)
 plot_enrich_integration(proteo_enrich_integration)
 
 ### Data frame needed for the CODEX Shiny app ---
-master_enrich_data <- create_enrichment_master_data(proteo_gsea_res, proteo_ora_res)
+proteo_master_enrich_data <- process_codex_data(proteo_gsea_res, proteo_ora_res)
