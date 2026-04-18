@@ -412,7 +412,7 @@ compute_diff_analysis <- function(df, matrix_type, save_path = "data/01_proteo_t
   return(top_tables)
 }
 
-compute_extended_diff_analysis <- function(df, matrix_type, save_path = "data/09_extended_toptables/") {
+compute_extended_diff_analysis <- function(df, matrix_type, save_path = "data/09_proteo_toptables_extended/") {
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
@@ -817,7 +817,7 @@ filter_ora_results <- function(result_list, base_path = "data/05_ora_results_fil
 }
 
 # d/ combining analyses ----
-merge_enrichment_results <- function(result_list, enrich_type, base_path = "data/06_enrichment_merged") {
+merge_enrichment_results <- function(result_list, enrich_type, base_path = "data/06_enrichment_merged/") {
   obj_name <- deparse(substitute(result_list))
 
   if (grepl("proteo", obj_name, ignore.case = TRUE)) {

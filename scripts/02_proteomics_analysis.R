@@ -103,7 +103,7 @@ proteo_cyto_diff_analysis <- compute_diff_analysis(df = proteo_cyto_matrix, matr
 proteo_nucl_diff_analysis <- compute_diff_analysis(df = proteo_nucl_matrix, matrix_type = "nucleus")
 
 toptables_path <- list.files(
-  path = "data/01_limma_toptables/",
+  path = "data/01_proteo_toptables/",
   pattern = "*.xlsx",
   full.names = TRUE
 )
