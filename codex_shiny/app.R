@@ -18,7 +18,7 @@ set.seed(12345)
 # Source functions / objects
 source(file = "scripts/01_functions.R")
 
-app_version <- "v1.3.1"
+app_version <- "v1.3.2"
 
 # Theme ----
 theme_codex <- bs_theme(
@@ -183,8 +183,6 @@ ui <- page_fillable(
 
 # Server ----
 server <- function(input, output, session) {
-  padj_threshold <- padj_threshold
-
   rv <- reactiveValues(
     enrich_df = NULL,
     selected_pathway = NULL,
@@ -209,7 +207,7 @@ server <- function(input, output, session) {
     )
 
     enrich_name <- paste0(rv$params$db_name, "_", rv$params$cell_comp, "_", rv$params$bio_cond)
-    df <- master_enrich_data[[enrich_name]]
+    df <- proteo_master_enrich_data[[enrich_name]]
     validate(need(!is.null(df), "No enrichment table found for this selection."))
 
     thr <- -log10(padj_threshold)
@@ -423,12 +421,12 @@ server <- function(input, output, session) {
   output$volcano_plot <- renderPlotly({
     req(rv$volcano_gg)
 
-    validate(need(exists("logFC_volcano_cutoff", inherits = TRUE), "logFC_volcano_cutoff not found."))
-    validate(need(exists("padj_volcano_cutoff", inherits = TRUE), "padj_volcano_cutoff not found."))
+    validate(need(exists("logFC_threshold", inherits = TRUE), "logFC_threshold not found."))
+    validate(need(exists("padj_threshold", inherits = TRUE), "padj_threshold not found."))
 
-    v1 <- -logFC_volcano_cutoff
-    v2 <- logFC_volcano_cutoff
-    h1 <- -log10(padj_volcano_cutoff)
+    v1 <- -logFC_threshold
+    v2 <- logFC_threshold
+    h1 <- -log10(padj_threshold)
 
     shapes <- list(
       list(

@@ -39,6 +39,39 @@ clean_proteo_df <- function(df) {
   return(clean_df)
 }
 
+extract_DESeq2_results <- function(dds_obj, condition_1, condition_2) {
+  res <- results(dds_obj, contrast = c("condition", condition_1, condition_2))
+  df <- as.data.frame(res@listData)
+  rownames(df) <- rownames(res)
+  df <- df %>%
+    dplyr::select(baseMean, stat, pvalue, padj, log2FoldChange, lfcSE)
+
+  return(df)
+}
+
+
+extract_DESeq2_dataviz <- function(dds_obj, condition_1, condition_2) {
+  res <- results(dds_obj, contrast = c("condition", condition_1, condition_2))
+  df <- as.data.frame(res@listData)
+  res_shrunk <- lfcShrink(
+    dds_obj,
+    contrast = c("condition", condition_1, condition_2),
+    type = "ashr"
+  )
+
+
+  res_shrunk <- data.frame(
+    as.data.frame(res_shrunk),
+    stat = res$stat
+  )
+
+  rownames(res_shrunk) <- rownames(res)
+  res_shrunk <- res_shrunk %>%
+    dplyr::select(baseMean, stat, pvalue, padj, log2FoldChange, lfcSE)
+
+  return(res_shrunk)
+}
+
 map_gene_symbols <- function(df) {
   df$ensembl_gene_id <- rownames(df)
   annot <- AnnotationDbi::select(
@@ -59,9 +92,8 @@ map_gene_symbols <- function(df) {
     dplyr::filter(!is.na(padj)) %>%
     dplyr::rename(t = stat) %>%
     dplyr::rename(logFC = log2FoldChange) %>%
-    dplyr::rename(ensembl_id = ensembl_gene_id)
-
-  df <- df[, c("ensembl_id", "gene_id", "baseMean", "logFC", "lfcSE", "t", "pvalue", "padj")]
+    dplyr::rename(ensembl_id = ensembl_gene_id) %>%
+    dplyr::select(ensembl_id, gene_id, baseMean, logFC, lfcSE, t, pvalue, padj)
 
   return(df)
 }
@@ -1486,7 +1518,7 @@ create_codex_volcano <- function(enrich_category,
   enrich_name <- paste0(db_name, "_", cell_compartment, "_", condition)
 
   # Select enrichment data
-  enrich_df <- master_enrich_data[[enrich_name]]
+  enrich_df <- proteo_master_enrich_data[[enrich_name]]
 
   if (enrich_category == "gsea") {
     enrich_df <- enrich_df %>%
@@ -1515,7 +1547,7 @@ create_codex_volcano <- function(enrich_category,
     unlist() %>%
     unique()
 
-  toptable <- toptables[[toptable_name]] %>%
+  toptable <- proteo_toptables[[toptable_name]] %>%
     mutate(
       diffexpressed = case_when(
         logFC_shrunk > logFC_threshold & adj.P.Val < padj_threshold ~ "up-regulated",
@@ -1610,7 +1642,7 @@ create_codex_enrichment <- function(enrich_category,
                                     save_path = "figures/10_user_generated/",
                                     padj_threshold = 0.05) {
   enrich_name <- paste0(db_name, "_", cell_compartment, "_", condition)
-  df <- master_enrich_data[[enrich_name]]
+  df <- proteo_master_enrich_data[[enrich_name]]
   validate(need(!is.null(df), "No enrichment table found for this selection."))
 
   thr <- -log10(padj_threshold)

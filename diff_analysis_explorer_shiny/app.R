@@ -17,14 +17,14 @@ gc()
 set.seed(12345)
 
 # Source functions + data ----
-source(file = "scripts/00_functions.R")
+source(file = "scripts/01_functions.R")
 
-stopifnot(exists("extended_toptables", inherits = TRUE))
+stopifnot(exists("proteo_toptables_extended", inherits = TRUE))
 stopifnot(exists("create_dae_volcano", inherits = TRUE))
-stopifnot(exists("logFC_volcano_cutoff", inherits = TRUE))
-stopifnot(exists("padj_volcano_cutoff", inherits = TRUE))
+stopifnot(exists("logFC_threshold", inherits = TRUE))
+stopifnot(exists("padj_threshold", inherits = TRUE))
 
-app_version <- "v1.0.1"
+app_version <- "v1.1.0"
 conditions <- c("dcSSc_ATAp", "dcSSc_ATAn", "lcSSc_ACA", "HC", "NS")
 
 # Theme ----
@@ -193,7 +193,7 @@ server <- function(input, output, session) {
         validate(need(input$cond_a != input$cond_b, "Condition A and Condition B must be different."))
 
         res <- fetch_toptable_autoflip(
-          toptables = extended_toptables,
+          toptables = proteo_toptables_extended,
           comp = input$cell_comp,
           a = input$cond_a,
           b = input$cond_b
@@ -241,8 +241,11 @@ server <- function(input, output, session) {
   observeEvent(plotly::event_data("plotly_click", source = "volcano_src"), {
     ed <- plotly::event_data("plotly_click", source = "volcano_src")
     req(ed, rv$volcano_df)
+    req(!is.null(ed$customdata), length(ed$customdata) >= 1)
 
     pt_id <- ed$customdata[[1]]
+    req(length(pt_id) == 1, !is.na(pt_id))
+
     gene <- rv$volcano_df %>%
       dplyr::filter(.pt_id == pt_id) %>%
       dplyr::pull(gene_id)
@@ -339,9 +342,9 @@ server <- function(input, output, session) {
     y_max <- max(df$mlog10, na.rm = TRUE)
     y_max <- if (is.finite(y_max)) ceiling(y_max) else 10
 
-    v1 <- -logFC_volcano_cutoff
-    v2 <- logFC_volcano_cutoff
-    h1 <- -log10(padj_volcano_cutoff)
+    v1 <- -logFC_threshold
+    v2 <- logFC_threshold
+    h1 <- -log10(padj_threshold)
 
     shapes <- list(
       list(
@@ -358,24 +361,22 @@ server <- function(input, output, session) {
       )
     )
 
-    plotly::plot_ly(
-      data = df_bg,
-      x = ~lfc, y = ~mlog10,
-      type = "scatter", mode = "markers",
-      showlegend = FALSE,
-      hoverinfo = "skip",
-      source = "volcano_src",
-      customdata = ~.pt_id,
-      marker = list(size = 6, color = "rgba(170,170,170,0.4)")
-    ) %>%
+    p <- plotly::plot_ly() %>%
+      plotly::add_trace(
+        data = df_bg,
+        x = ~lfc, y = ~mlog10,
+        type = "scatter", mode = "markers",
+        showlegend = FALSE,
+        hoverinfo = "skip",
+        customdata = ~.pt_id,
+        marker = list(size = 6, color = "rgba(170,170,170,0.4)")
+      ) %>%
       plotly::add_trace(
         data = df_dn,
         x = ~lfc, y = ~mlog10,
         type = "scatter", mode = "markers",
-        inherit = FALSE,
         showlegend = FALSE,
         text = ~hover_text, hoverinfo = "text",
-        source = "volcano_src",
         customdata = ~.pt_id,
         marker = list(size = 8, color = "rgba(24,147,146,0.9)")
       ) %>%
@@ -383,10 +384,8 @@ server <- function(input, output, session) {
         data = df_up,
         x = ~lfc, y = ~mlog10,
         type = "scatter", mode = "markers",
-        inherit = FALSE,
         showlegend = FALSE,
         text = ~hover_text, hoverinfo = "text",
-        source = "volcano_src",
         customdata = ~.pt_id,
         marker = list(size = 8, color = "rgba(196,58,80,0.9)")
       ) %>%
@@ -395,8 +394,7 @@ server <- function(input, output, session) {
         x = ~lfc, y = ~mlog10,
         text = ~gene_label,
         textposition = "top center",
-        showlegend = FALSE,
-        inherit = FALSE
+        showlegend = FALSE
       ) %>%
       plotly::layout(
         shapes = shapes,
@@ -405,6 +403,10 @@ server <- function(input, output, session) {
         margin = list(l = 60, r = 20, t = 20, b = 55)
       ) %>%
       plotly::config(displayModeBar = TRUE)
+
+    p$x$source <- "volcano_src"
+    p <- plotly::event_register(p, "plotly_click")
+    p
   })
 
   output$dl_volcano_png <- downloadHandler(

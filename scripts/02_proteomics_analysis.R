@@ -1,4 +1,4 @@
-# ----- 1. Script setup -----
+# 1. Script setup -----
 ## a. Load required libraries ----
 ### Core
 library(data.table)
@@ -62,7 +62,7 @@ nucleus_groups <- c(
 source(file = "scripts/01_functions.R")
 
 
-# ---- 2. Process proteomic LFQ datasets -----
+# 2. Process proteomic LFQ datasets -----
 matrix_path <- list.files(
   path = "data/00_raw",
   pattern = "proteo.*\\.txt$",
@@ -97,7 +97,7 @@ proteo_nucl_plsda <- compute_plsda(df = proteo_nucleus, matrix_type = "nucleus")
 plot_dim_reduction(proteo_nucl_plsda)
 
 
-# ----- 4. Differential analysis -----
+# 4. Differential analysis -----
 ## a. Biological conditions vs Healthy Controls (HC) ----
 proteo_cyto_diff_analysis <- compute_diff_analysis(df = proteo_cyto_matrix, matrix_type = "cytoplasm")
 proteo_nucl_diff_analysis <- compute_diff_analysis(df = proteo_nucl_matrix, matrix_type = "nucleus")
@@ -118,7 +118,7 @@ proteo_cyto_extended_da <- compute_extended_diff_analysis(df = proteo_cyto_matri
 proteo_nucl_extended_da <- compute_extended_diff_analysis(df = proteo_nucl_matrix, matrix_type = "nucleus")
 
 toptables_path_extended <- list.files(
-  path = "data/09_extended_toptables/",
+  path = "data/09_proteo_toptables_extended/",
   pattern = "*.xlsx",
   full.names = TRUE
 )
@@ -128,7 +128,7 @@ proteo_toptables_extended <- lapply(toptables_path_extended, import_toptables) %
   setNames(tools::file_path_sans_ext(basename(toptables_path_extended)))
 
 
-# ----- 5. Gene Set Enrichment Analysis (GSEA) -----
+# 5. Gene Set Enrichment Analysis (GSEA) -----
 ## a. Process reference background genes ----
 raw_gmt <- list.files(
   path = "data/00_raw",
@@ -155,7 +155,7 @@ proteo_pathways_merged <- merge_enrichment_results(
 )
 
 
-# ----- 6. Over-Representation Analysis (ORA) -----
+# 6. Over-Representation Analysis (ORA) -----
 ## a. Process reference background genes ----
 proteo_evapath <- as.data.frame(proteo_raw$proteo_evapath_lfq)
 proteo_evapath <- clean_evapath(proteo_evapath)
@@ -179,7 +179,7 @@ proteo_ora_res_filtered <- filter_ora_results(proteo_ora_res)
 proteo_ora_pathways_merged <- merge_enrichment_results(result_list = proteo_ora_res_filtered, enrich_type = "ora")
 
 
-# ----- 7. Cross-enrichment merging -----
+# 7. Cross-enrichment merging -----
 proteo_enrich_integration <- integrate_proteo_enrich_res(proteo_gsea_res, proteo_ora_res)
 plot_enrich_integration(proteo_enrich_integration)
 
