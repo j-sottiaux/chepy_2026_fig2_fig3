@@ -12,13 +12,9 @@
   library(bslib)
 }
 
-gc()
-set.seed(12345)
-
 # Source functions / objects
-source(file = "scripts/01_functions.R")
-
-app_version <- "v1.3.2"
+source("scripts/01_functions.R")
+app_version <- "v1.3.6"
 
 # Theme ----
 theme_codex <- bs_theme(
@@ -144,7 +140,11 @@ ui <- page_fillable(
           pickerInput(
             "bio_cond",
             tags$strong("2️⃣ Biological condition"),
-            choices = c("dcSSc_ATAp", "dcSSc_ATAn", "lcSSc_ACA")
+            choices = setNames(
+              c("ATAp", "ATAn", "ACA"),
+              unname(proteo_cond_labels[c("ATAp", "ATAn", "ACA")])
+            ),
+            selected = "ATAp"
           ),
           hr(),
           pickerInput(
@@ -260,7 +260,9 @@ server <- function(input, output, session) {
       tags$span(
         style = "opacity:.75; font-weight:400; margin-left:8px;",
         paste0(
-          toupper(rv$params$db_name), " / ", rv$params$cell_comp, " / ", rv$params$bio_cond,
+          toupper(rv$params$db_name), " / ",
+          rv$params$cell_comp, " / ",
+          format_proteo_condition(rv$params$bio_cond),
           " / padj≤", padj_threshold
         )
       ),
@@ -344,7 +346,7 @@ server <- function(input, output, session) {
 
     pal <- pathways_colors[levels(df_sig$pathway_relation)]
 
-    plotly::plot_ly(
+    p <- plotly::plot_ly(
       data = df_bg,
       x = ~logGSEA, y = ~logORA,
       type = "scatter", mode = "markers",
@@ -361,7 +363,8 @@ server <- function(input, output, session) {
         color = ~pathway_relation,
         colors = pal,
         marker = list(size = 9, opacity = 0.9),
-        text = ~hover, hoverinfo = "text",
+        text = ~hover,
+        hoverinfo = "text",
         customdata = ~Description,
         showlegend = TRUE
       ) %>%
@@ -378,12 +381,15 @@ server <- function(input, output, session) {
         annotations = list(list(
           x = x_lim, y = thr - 0.2,
           text = "<b>co-significance area</b>",
-          showarrow = FALSE, xanchor = "right",
+          showarrow = FALSE,
+          xanchor = "right",
           font = list(size = 10, color = "grey30")
         )),
         margin = list(l = 60, r = 20, t = 20, b = 55)
       ) %>%
       plotly::config(displayModeBar = TRUE)
+    
+    plotly::event_register(p, "plotly_click")
   })
 
   observeEvent(plotly::event_data("plotly_click", source = "enrich"), {
@@ -443,9 +449,11 @@ server <- function(input, output, session) {
       )
     )
 
-    plotly::ggplotly(rv$volcano_gg, tooltip = "text", source = "volcano") %>%
+    p <- plotly::ggplotly(rv$volcano_gg, tooltip = "text", source = "volcano") %>%
       plotly::layout(shapes = shapes) %>%
       plotly::config(displayModeBar = TRUE)
+    
+    plotly::event_register(p, "plotly_click")
   })
 
   observeEvent(plotly::event_data("plotly_click", source = "volcano"), {
@@ -480,10 +488,12 @@ server <- function(input, output, session) {
 
   output$dl_enrich_png <- downloadHandler(
     filename = function() {
-      req(rv$params)
+      req(rv$params, rv$selected_pathway)
       paste0(
-        toupper(rv$params$db_name), "_enrichment_integration_",
-        rv$params$bio_cond, "_", rv$params$cell_comp, ".png"
+        toupper(rv$params$db_name), "_", rv$params$enrich_cat, "_volcano_",
+        safe_proteo_condition(rv$params$bio_cond), "_",
+        str_replace_all(tolower(rv$selected_pathway), "\\s+", "_"),
+        ".png"
       )
     },
     content = function(file) {

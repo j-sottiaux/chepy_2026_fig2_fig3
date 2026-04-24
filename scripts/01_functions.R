@@ -1,4 +1,143 @@
-# 1/ Data processing functions -----
+## Root reproducibility check
+gc()
+set.seed(12345)
+
+# 1. Biological conditions management ----
+## a. Proteomics biological condition setup ----
+cytoATAp <- 1:10
+nuclATAp <- c(1, 3:10)
+
+ATAn <- 11:20
+ACA  <- 21:30
+HC   <- 31:40
+
+cytoNS <- 41:44
+nuclNS <- 41:45
+
+proteo_sample_sets <- list(
+  cytoplasm = list(
+    ATAp = cytoATAp,
+    ATAn = ATAn,
+    ACA  = ACA,
+    HC   = HC,
+    NS   = cytoNS
+  ),
+  nucleus = list(
+    ATAp = nuclATAp,
+    ATAn = ATAn,
+    ACA  = ACA,
+    HC   = HC,
+    NS   = nuclNS
+  )
+)
+
+proteo_cond_levels <- c(
+  "ATAp",
+  "ATAn",
+  "ACA",
+  "HC",
+  "NS"
+)
+
+proteo_cond_labels <- c(
+  ATAp = "IgG ATA+",
+  ATAn = "IgG ATA- / ACA-",
+  ACA  = "IgG ACA+",
+  HC   = "HC IgG",
+  NS   = "NS"
+)
+
+proteo_cond_labels_expr <- parse(text = c(
+  ATAp = "IgG^{ATA*'+'}",
+  ATAn = "IgG^{ATA*'-'~'/'~ACA*'-'}",
+  ACA  = "IgG^{ACA*'+'}",
+  HC   = "HC~IgG",
+  NS   = "NS"
+))
+
+proteo_cond_colors <- c(
+  "ATAp" = "#DCA237",
+  "ATAn" = "#469C76",
+  "ACA"  = "#C17DA5",
+  "HC"   = "#3070AD",
+  "NS"   = "#787878"
+)
+
+transcripto_cond_levels <- c("ATA", "HC", "IFNa")
+
+transcripto_cond_labels <- c(
+  ATA  = "IgG ATA+",
+  HC   = "HC IgG",
+  IFNa = "IFNα"
+)
+
+transcripto_cond_labels_expr <- parse(text = c(
+  ATA  = "ATA",
+  HC   = "HC~IgG",
+  IFNa = "IFNα"
+))
+
+transcripto_cond_colors <- c(
+  ATA  = "#C66526",
+  HC   = "#3070AD",
+  IFNa = "#E2D418"
+)
+
+make_proteo_cond_vector <- function(matrix_type) {
+  matrix_type <- tolower(matrix_type)
+  
+  if (!(matrix_type %in% names(proteo_sample_sets))) {
+    stop("Error: 'matrix_type' must be either 'cytoplasm' or 'nucleus'.")
+  }
+  
+  sample_set <- proteo_sample_sets[[matrix_type]]
+  
+  factor(
+    rep(names(sample_set), lengths(sample_set)),
+    levels = proteo_cond_levels
+  )
+}
+
+make_proteo_cond_labels <- function(group) {
+  factor(
+    unname(proteo_cond_labels[as.character(group)]),
+    levels = unname(proteo_cond_labels[proteo_cond_levels])
+  )
+}
+
+check_group_matches_df <- function(df, group, matrix_type) {
+  if (ncol(df) != length(group)) {
+    stop(
+      "Error: number of columns in df does not match number of samples in group.\n",
+      "ncol(df) = ", ncol(df), "\n",
+      "length(group) = ", length(group), "\n",
+      "matrix_type = ", matrix_type
+    )
+  }
+  invisible(TRUE)
+}
+
+# Condition display Shiny helpers ----
+format_proteo_condition <- function(condition_key) {
+  label <- unname(proteo_cond_labels[as.character(condition_key)])
+  
+  if (length(label) == 0 || is.na(label)) {
+    as.character(condition_key)
+  } else {
+    label
+  }
+}
+
+safe_proteo_condition <- function(condition_key) {
+  format_proteo_condition(condition_key) |>
+    stringr::str_replace_all("\\+", "pos") |>
+    stringr::str_replace_all("-", "neg") |>
+    stringr::str_replace_all("/", "_") |>
+    stringr::str_replace_all("\\s+", "_") |>
+    stringr::str_replace_all("[^A-Za-z0-9_]", "")
+}
+
+# 2. Data processing functions -----
 import_matrix <- function(file_path) {
   raw_matrix <- fread(file_path) %>%
     return(list(raw_matrix))
@@ -10,31 +149,24 @@ import_toptables <- function(toptable_path) {
 }
 
 clean_proteo_df <- function(df) {
-  # Rename gene id column for ease of use
   names(df)[names(df) == "T: T: Gene names"] <- "gene_id"
 
-  # Handle missing gene ids
   missing_gene_ids <- which(df[, "gene_id"] == "")
   df[missing_gene_ids, "gene_id"] <- paste("missing", 1:length(missing_gene_ids), ";")
 
-  # Create a new column to clean up labels
   geneID <- strsplit(df[, "gene_id"], ";")
   geneID <- sapply(geneID, "[[", 1)
 
-  # Label duplicated gene names to spot potential isoforms
   dups <- which(duplicated(geneID))
   geneID[dups] <- paste(geneID[dups], "_duplicate_", 1:length(dups), sep = "")
 
-  # Clean labels and put gene ids as row names for clean df
   row.names(df) <- geneID
 
-  # Select and reorder LFQ columns for subsequent analysis
   lfq_cols <- names(df)[grepl("LFQ intensity", names(df))]
   lfq_cols_ordered <- lfq_cols[order(as.numeric(gsub("\\D+", "", lfq_cols)))]
 
-  # Create the clean dataframe
   clean_df <- df %>%
-    dplyr::select(all_of(lfq_cols_ordered)) # Include the ens_gene_id column
+    dplyr::select(all_of(lfq_cols_ordered))
 
   return(clean_df)
 }
@@ -48,7 +180,6 @@ extract_DESeq2_results <- function(dds_obj, condition_1, condition_2) {
 
   return(df)
 }
-
 
 extract_DESeq2_dataviz <- function(dds_obj, condition_1, condition_2) {
   res <- results(dds_obj, contrast = c("condition", condition_1, condition_2))
@@ -202,7 +333,7 @@ filter_xp_transcriptome <- function(ref_list) {
   })
 }
 
-# 2/ Exploratory analysis -----
+# 3. Exploratory analysis -----
 compute_pca <- function(df, matrix_type, save_path = "figures/01_exploratory_analysis") {
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
@@ -213,40 +344,27 @@ compute_pca <- function(df, matrix_type, save_path = "figures/01_exploratory_ana
     stop("Error: 'matrix_type' must be either 'cytoplasm' or 'nucleus'.")
   }
 
-  if (matrix_type == "cytoplasm") {
-    NS <- cytoNS
-    ATAp <- cytoATAp
-    prefix <- "cyto"
-  } else {
-    NS <- nuclNS
-    ATAp <- nuclATAp
-    prefix <- "nucl"
-  }
-
-  group <- factor(
-    c(
-      rep("dcSSc_ATAp", length(ATAp)),
-      rep("dcSSc_ATAn", length(ATAn)),
-      rep("lcSSc_ACA", length(ACA)),
-      rep("HC", length(HC)),
-      rep("NS", length(NS))
-    ),
-    levels = c("dcSSc_ATAp", "dcSSc_ATAn", "lcSSc_ACA", "HC", "NS")
-  )
-
+  group <- make_proteo_cond_vector(matrix_type)
+  group_label <- make_proteo_cond_labels(group)
+  check_group_matches_df(df, group, matrix_type)
+  
   matrix <- as.matrix(df)
-  matrix_pca <- pca(t(matrix), ncomp = 3, center = TRUE, scale = FALSE)
+  matrix_pca <- mixOmics::pca(t(matrix), 
+                              ncomp = 3, 
+                              center = TRUE,
+                              scale = FALSE)
 
   explained_var <- 100 * matrix_pca$prop_expl_var$X[1:2]
-  names(explained_var) <- paste0(prefix, "_PC", 1:2)
+  names(explained_var) <- paste0(matrix_type, "_PC", 1:2)
 
   coords <- as.data.frame(matrix_pca$variates$X[, 1:2, drop = FALSE])
   colnames(coords) <- c("x", "y")
   coords$group <- group
+  coords$group_label <- group_label
 
   plot_list <- plotIndiv(
     matrix_pca,
-    group = group,
+    group = group_label,
     ind.names = FALSE,
     legend = TRUE,
     ellipse = FALSE,
@@ -255,23 +373,7 @@ compute_pca <- function(df, matrix_type, save_path = "figures/01_exploratory_ana
     gg = TRUE
   )
 
-  final_plot <- plot_list$graph +
-    ggplot2::theme(
-      plot.background = element_rect(fill = "#F0F0F0", color = NA),
-      panel.background = element_rect(fill = "#FFFFFF", color = NA),
-      plot.margin = margin(15, 15, 15, 15),
-      plot.title = element_text(color = "#304852", face = "bold", size = rel(1.6), hjust = 0),
-      plot.subtitle = element_text(color = "#304852", size = rel(1.2), hjust = 0),
-      axis.title = element_text(color = "#36595F", size = rel(1.2)),
-      axis.text = element_text(color = "#36595F", size = rel(1)),
-      axis.line = element_line(color = "#DADADA", linewidth = 0.25),
-      axis.ticks = element_line(color = "#36595F", linewidth = 0.25),
-      panel.grid.major = element_line(color = "#EAEAEA", linewidth = 0.25),
-      legend.title = element_text(face = "bold", color = "#36595F"),
-      legend.text = element_text(color = "#36595F"),
-      strip.background = element_rect(fill = "#36595F"),
-      strip.text = element_text(color = "white", face = "bold", size = rel(1))
-    )
+  final_plot <- plot_list$graph
 
   return(list(
     plot = final_plot,
@@ -292,43 +394,30 @@ compute_plsda <- function(df, matrix_type, save_path = "figures/01_exploratory_a
     stop("Error: 'matrix_type' must be either 'cytoplasm' or 'nucleus'.")
   }
 
-  if (matrix_type == "cytoplasm") {
-    NS <- cytoNS
-    ATAp <- cytoATAp
-    prefix <- "cyto"
-  } else {
-    NS <- nuclNS
-    ATAp <- nuclATAp
-    prefix <- "nucl"
-  }
-
-  group <- factor(
-    c(
-      rep("dcSSc_ATAp", length(ATAp)),
-      rep("dcSSc_ATAn", length(ATAn)),
-      rep("lcSSc_ACA", length(ACA)),
-      rep("HC", length(HC)),
-      rep("NS", length(NS))
-    ),
-    levels = c("dcSSc_ATAp", "dcSSc_ATAn", "lcSSc_ACA", "HC", "NS")
-  )
+  group <- make_proteo_cond_vector(matrix_type)
+  group_label <- make_proteo_cond_labels(group)
+  check_group_matches_df(df, group, matrix_type)
 
   matrix <- as.matrix(df)
-  matrix_plsda <- plsda(t(matrix), group, ncomp = 3, scale = TRUE)
+  matrix_plsda <- mixOmics::plsda(t(matrix),
+                                  group,
+                                  ncomp = 3,
+                                  scale = TRUE)
 
   explained_var <- NULL
   if (!is.null(matrix_plsda$prop_expl_var$X)) {
     explained_var <- 100 * matrix_plsda$prop_expl_var$X[1:2]
-    names(explained_var) <- paste0(prefix, "_comp", 1:2)
+    names(explained_var) <- paste0(matrix_type, "_comp", 1:2)
   }
 
   coords <- as.data.frame(matrix_plsda$variates$X[, 1:2, drop = FALSE])
   colnames(coords) <- c("x", "y")
   coords$group <- group
+  coords$group_label <- group_label
 
   plot_list <- plotIndiv(
     matrix_plsda,
-    group = group,
+    group = group_label,
     ind.names = FALSE,
     legend = TRUE,
     ellipse = FALSE,
@@ -337,23 +426,7 @@ compute_plsda <- function(df, matrix_type, save_path = "figures/01_exploratory_a
     gg = TRUE
   )
 
-  final_plot <- plot_list$graph +
-    ggplot2::theme(
-      plot.background = element_rect(fill = "#F0F0F0", color = NA),
-      panel.background = element_rect(fill = "#FFFFFF", color = NA),
-      plot.margin = margin(15, 15, 15, 15),
-      plot.title = element_text(color = "#304852", face = "bold", size = rel(1.3), hjust = 0),
-      plot.subtitle = element_text(color = "#304852", size = rel(1.2), hjust = 0),
-      axis.title = element_text(color = "#36595F", size = rel(1.2)),
-      axis.text = element_text(color = "#36595F", size = rel(1)),
-      axis.line = element_line(color = "#DADADA", linewidth = 0.25),
-      axis.ticks = element_line(color = "#36595F", linewidth = 0.25),
-      panel.grid.major = element_line(color = "#EAEAEA", linewidth = 0.25),
-      legend.title = element_text(face = "bold", color = "#36595F"),
-      legend.text = element_text(color = "#36595F"),
-      strip.background = element_rect(fill = "#36595F"),
-      strip.text = element_text(color = "white", face = "bold", size = rel(1))
-    )
+  final_plot <- plot_list$graph
 
   return(list(
     plot = final_plot,
@@ -364,7 +437,7 @@ compute_plsda <- function(df, matrix_type, save_path = "figures/01_exploratory_a
   ))
 }
 
-# 3/ Differential analysis functions -----
+# 4. Differential analysis functions -----
 compute_diff_analysis <- function(df, matrix_type, save_path = "data/01_proteo_toptables/") {
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
@@ -375,38 +448,26 @@ compute_diff_analysis <- function(df, matrix_type, save_path = "data/01_proteo_t
     stop("Error: 'matrix_type' must be either 'cytoplasm' or 'nucleus'.")
   }
 
-  if (matrix_type == "cytoplasm") {
-    NS <- cytoNS
-    ATAp <- cytoATAp
-  } else if (matrix_type == "nucleus") {
-    NS <- nuclNS
-    ATAp <- nuclATAp
-  }
+  group <- make_proteo_cond_vector(matrix_type)
+  check_group_matches_df(df, group, matrix_type)
 
-  group <- factor(c(
-    rep("dcSSc_ATAp", length(ATAp)),
-    rep("dcSSc_ATAn", length(ATAn)),
-    rep("lcSSc_ACA", length(ACA)),
-    rep("HC", length(HC)),
-    rep("NS", length(NS))
-  ))
-
+  group <- as.factor(group)
   design <- model.matrix(~ -1 + group)
   colnames(design) <- levels(group)
 
-  contrast.matrix <- makeContrasts(
-    dcSSc_ATAp_HC = dcSSc_ATAp - HC,
-    dcSSc_ATAn_HC = dcSSc_ATAn - HC,
-    lcSSc_ACA_HC = lcSSc_ACA - HC,
+  contrast_matrix <- limma::makeContrasts(
+    ATAp_HC = ATAp - HC,
+    ATAn_HC = ATAn - HC,
+    ACA_HC = ACA - HC,
     NS_HC = NS - HC,
     levels = design
   )
 
-  fit <- lmFit(df, design)
-  fit_contrast <- contrasts.fit(fit, contrast.matrix)
-  fit_ebayes <- eBayes(fit_contrast)
+  fit <- limma::lmFit(df, design)
+  fit_contrast <- limma::contrasts.fit(fit, contrast_matrix)
+  fit_ebayes <- limma::eBayes(fit_contrast)
 
-  comparisons <- c("dcSSc_ATAp_HC", "dcSSc_ATAn_HC", "lcSSc_ACA_HC", "NS_HC")
+  comparisons <- colnames(contrast_matrix)
   top_tables <- list()
 
   for (comp in comparisons) {
@@ -417,12 +478,12 @@ compute_diff_analysis <- function(df, matrix_type, save_path = "data/01_proteo_t
 
     if (any(valid)) {
       logFC <- tt$logFC[valid]
-      se_logFC <- tt$logFC[valid] / tt$t[valid]
+      se_logFC <- abs(tt$logFC[valid] / tt$t[valid])
 
       # Adaptive shrinkage
       ashr_fit <- ashr::ash(logFC, se_logFC)
       tt$logFC_shrunk <- tt$logFC # default to original
-      tt$logFC_shrunk[valid] <- get_pm(ashr_fit) # Add the shrunken logFC values
+      tt$logFC_shrunk[valid] <- get_pm(ashr_fit) 
       tt$lfsr <- NA
       tt$lfsr[valid] <- get_lfsr(ashr_fit) # Add the LFSR values from ashr
     } else {
@@ -434,7 +495,7 @@ compute_diff_analysis <- function(df, matrix_type, save_path = "data/01_proteo_t
     table_to_save <- tt %>% rownames_to_column(var = "gene_id")
 
     # Save the top table with the added shrunken logFC
-    file_name <- paste0(save_path, matrix_type, "_", comp, ".xlsx")
+    file_name <- paste0(save_path, paste0(matrix_type, "_", comp, ".xlsx"))
     write_xlsx(table_to_save, file_name)
 
     top_tables[[comp]] <- tt
@@ -454,54 +515,42 @@ compute_extended_diff_analysis <- function(df, matrix_type, save_path = "data/09
     stop("Error: 'matrix_type' must be either 'cytoplasm' or 'nucleus'.")
   }
 
-  if (matrix_type == "cytoplasm") {
-    NS <- cytoNS
-    ATAp <- cytoATAp
-  } else if (matrix_type == "nucleus") {
-    NS <- nuclNS
-    ATAp <- nuclATAp
-  }
-
-  group <- factor(c(
-    rep("dcSSc_ATAp", length(ATAp)),
-    rep("dcSSc_ATAn", length(ATAn)),
-    rep("lcSSc_ACA", length(ACA)),
-    rep("HC", length(HC)),
-    rep("NS", length(NS))
-  ))
-
+  group <- make_proteo_cond_vector(matrix_type)
+  check_group_matches_df(df, group, matrix_type)
+  
+  group <- as.factor(group)
   design <- model.matrix(~ -1 + group)
   colnames(design) <- levels(group)
 
-  contrast.matrix <- makeContrasts(
-    # dc_SSc_ATAp
-    dcSSc_ATAp_dcSSc_ATAn = dcSSc_ATAp - dcSSc_ATAn,
-    dcSSc_ATAp_lcSSc_ACA = dcSSc_ATAp - lcSSc_ACA,
-    dcSSc_ATAp_HC = dcSSc_ATAp - HC,
-    dcSSc_ATAp_NS = dcSSc_ATAp - NS,
+  contrast_matrix <- limma::makeContrasts(
+    # ATAp
+    ATAp_ATAn = ATAp - ATAn,
+    ATAp_ACA = ATAp - ACA,
+    ATAp_HC = ATAp - HC,
+    ATAp_NS = ATAp - NS,
 
-    # dcSSc_ATAn
-    dcSSc_ATAn_dcSSc_ATAp = dcSSc_ATAn - dcSSc_ATAp,
-    dcSSc_ATAn_lcSSc_ACA = dcSSc_ATAn - lcSSc_ACA,
-    dcSSc_ATAn_HC = dcSSc_ATAn - HC,
-    dcSSc_ATAn_NS = dcSSc_ATAn - NS,
+    # ATAn
+    ATAn_ATAp = ATAn - ATAp,
+    ATAn_ACA = ATAn - ACA,
+    ATAn_HC = ATAn - HC,
+    ATAn_NS = ATAn - NS,
 
-    # lcSSc_ACA
-    lcSSc_ACA_dcSSc_ATAp = lcSSc_ACA - dcSSc_ATAp,
-    lcSSc_ACA_dcSSc_ATAn = lcSSc_ACA - dcSSc_ATAn,
-    lcSSc_ACA_HC = lcSSc_ACA - HC,
-    lcSSc_ACA_NS = lcSSc_ACA - NS,
+    # ACA
+    ACA_ATAp = ACA - ATAp,
+    lcSSc_ACA_dcSSc_ATAn = ACA - ATAn,
+    ACA_HC = ACA - HC,
+    ACA_NS = ACA - NS,
 
     # HC
-    HC_dcSSc_ATAp = HC - dcSSc_ATAp,
-    HC_dcSSc_ATAn = HC - dcSSc_ATAn,
-    HC_lcSSc_ACA = HC - lcSSc_ACA,
+    HC_ATAp = HC - ATAp,
+    HC_ATAn = HC - ATAn,
+    HC_ACA = HC - ACA,
     HC_NS = HC - NS,
 
     # NS
-    NS_dcSSc_ATAp = NS - dcSSc_ATAp,
-    NS_dcSSc_ATAn = NS - dcSSc_ATAn,
-    NS_lcSSc_ACA = NS - lcSSc_ACA,
+    NS_ATAp = NS - ATAp,
+    NS_ATAn = NS - ATAn,
+    NS_ACA = NS - ACA,
     NS_HC = NS - HC,
 
     # levels
@@ -509,17 +558,10 @@ compute_extended_diff_analysis <- function(df, matrix_type, save_path = "data/09
   )
 
   fit <- limma::lmFit(df, design)
-  fit_contrast <- limma::contrasts.fit(fit, contrast.matrix)
+  fit_contrast <- limma::contrasts.fit(fit, contrast_matrix)
   fit_ebayes <- limma::eBayes(fit_contrast)
 
-  comparisons <- c(
-    "dcSSc_ATAp_dcSSc_ATAn", "dcSSc_ATAp_lcSSc_ACA", "dcSSc_ATAp_HC",
-    "dcSSc_ATAp_NS", "dcSSc_ATAn_dcSSc_ATAp", "dcSSc_ATAn_lcSSc_ACA",
-    "dcSSc_ATAn_HC", "dcSSc_ATAn_NS", "lcSSc_ACA_dcSSc_ATAp",
-    "lcSSc_ACA_dcSSc_ATAn", "lcSSc_ACA_HC", "lcSSc_ACA_NS",
-    "HC_dcSSc_ATAp", "HC_dcSSc_ATAn", "HC_lcSSc_ACA", "HC_NS",
-    "NS_dcSSc_ATAp", "NS_dcSSc_ATAn", "NS_lcSSc_ACA", "NS_HC"
-  )
+  comparisons <- colnames(contrast_matrix)
 
   top_tables <- list()
 
@@ -531,7 +573,7 @@ compute_extended_diff_analysis <- function(df, matrix_type, save_path = "data/09
 
     if (any(valid)) {
       logFC <- tt$logFC[valid]
-      se_logFC <- tt$logFC[valid] / tt$t[valid]
+      se_logFC <- abs(tt$logFC[valid] / tt$t[valid])
 
       # Adaptive shrinkage
       ashr_fit <- ashr::ash(logFC, se_logFC)
@@ -548,7 +590,7 @@ compute_extended_diff_analysis <- function(df, matrix_type, save_path = "data/09
     table_to_save <- tt %>% rownames_to_column(var = "gene_id")
 
     # Save the top table with the added shrunken logFC
-    file_name <- paste0(save_path, matrix_type, "_", comp, ".xlsx")
+    file_name <- paste0(save_path, paste0(matrix_type, "_", comp, ".xlsx"))
     write_xlsx(table_to_save, file_name)
 
     top_tables[[comp]] <- tt
@@ -558,9 +600,8 @@ compute_extended_diff_analysis <- function(df, matrix_type, save_path = "data/09
   return(top_tables)
 }
 
-# 4/ Enrichment functions -----
-
-# a/ pathways categorization ----
+# 5. Enrichment functions -----
+## a. pathways categorization ----
 RNA_pathways_labels <- paste(
   "mRNA", "rRNA", "tRNA", "RNA POLYMERASE", "SPLICING",
   "RNA PROCESSING", "RNA METABOLIC", "RNA STABILITY",
@@ -583,9 +624,9 @@ translation_pathways_labels <- paste(
 )
 
 immunity_pathways_labels <- paste(
-  "IMMUNE", "SLITS", "ROBO", "P53", "INTERFERON", "IFN", "INTERLEUKIN", "IL", "NF KB",
+  "IMMUNE", "ANTIVIRAL MECHANISM", "SLITS", "ROBO", "P53", "INTERFERON", "IFN", "INTERLEUKIN", "IL", "NF KB",
   "B CELL", "T CELL", "BCR", "TCR", "MHC", "ANTIGEN PROCESSING", "DEFENSE RESPONSE",
-  "CELL KILLING", "RESPONSE TO VIRUS", "INFLUENZA", "STRESS RESPONSE", "STARVATION", "CELL DEATH",
+  "CELL KILLING", "RESPONSE TO VIRUS", "VIRUS", "VIRAL", "INFECTION", "COVID", "INFLUENZA", "STRESS RESPONSE", "STARVATION", "CELL DEATH",
   "FIBROSIS", "HEDGEHOG", "APOPTOSIS",
   sep = "|"
 )
@@ -597,16 +638,16 @@ categorize_pathway <- function(description) {
   description <- str_squish(description)
 
   case_when(
-    str_detect(description, regex(RNA_pathways_labels, ignore_case = TRUE)) ~ "RNA metabolism & processing",
-    str_detect(description, regex(DNA_pathways_labels, ignore_case = TRUE)) ~ "DNA metabolism & processing",
-    str_detect(description, regex(translation_pathways_labels, ignore_case = TRUE)) ~ "Translation & ribosome biology",
-    str_detect(description, regex(immunity_pathways_labels, ignore_case = TRUE)) ~ "Immune & stress response",
+    str_detect(description, regex(RNA_pathways_labels, ignore_case = TRUE)) ~ "RNA metabolism",
+    str_detect(description, regex(DNA_pathways_labels, ignore_case = TRUE)) ~ "DNA metabolism",
+    str_detect(description, regex(translation_pathways_labels, ignore_case = TRUE)) ~ "Translation related",
+    str_detect(description, regex(immunity_pathways_labels, ignore_case = TRUE)) ~ "Immune response",
     TRUE ~ "Other"
   )
 }
 
 
-# b/ GSEA ----
+## b. GSEA ----
 compute_gsea <- function(ref_background, gene_list, base_path = "data/02_gsea_results_raw/") {
   obj_name <- deparse(substitute(gene_list))
 
@@ -728,7 +769,7 @@ filter_gsea_results <- function(result_list, base_path = "data/03_gsea_results_f
   return(res_filtered)
 }
 
-# c/ ORA ----
+## c. ORA ----
 compute_ora <- function(xp_background, gene_list, base_path = "data/04_ora_results_raw/") {
   obj_name <- deparse(substitute(gene_list))
 
@@ -848,7 +889,7 @@ filter_ora_results <- function(result_list, base_path = "data/05_ora_results_fil
   return(res_filtered)
 }
 
-# d/ combining analyses ----
+## d. Combining analyses ----
 merge_enrichment_results <- function(result_list, enrich_type, base_path = "data/06_enrichment_merged/") {
   obj_name <- deparse(substitute(result_list))
 
@@ -1022,7 +1063,7 @@ integrate_transcripto_enrich_res <- function(gsea_obj, ora_obj,
   return(results_list)
 }
 
-# e/ Create "Master data" for the "Master volcano plot" ----
+## e. Create "Master data" for the "Master volcano plot" ----
 process_codex_data <- function(
   gsea_obj, ora_obj,
   db_names = names(ref_background_genes),
@@ -1121,35 +1162,22 @@ process_codex_data <- function(
   results_list
 }
 
-# 5/ Data visualization functions -----
-plot_theme <- {
-  ggplot2::theme(
-    # General aspect of the plot
-    plot.background = element_rect(fill = "#F0F0F0"),
-    panel.background = element_rect(fill = "#FFFFFF"),
-    plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt"),
-    plot.title = element_text(color = "#1E5565", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(2)),
-    plot.subtitle = element_text(color = "#304852", family = "Helvetica Neue", hjust = 0, size = rel(1.2)),
+# 6. Data visualization functions -----
+pathways_colors <- c(
+  "DNA metabolism"       = "#BC272D",  
+  "RNA metabolism"       = "#0D7D87",  
+  "Translation related"  = "#50AD9F",
+  "Immune response"      = "#C99B38",  
+  "Other"                = "grey48"  
+)
 
-    # Axis titles and texts
-    axis.title.x = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(1)),
-    axis.text.x = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(0.9), angle = 0, hjust = 0.5),
-    axis.title.y = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(1)), ,
-    axis.text.y = element_text(color = "#36595F", family = "Helvetica Neue", size = rel(0.9), angle = 0, hjust = 0.5),
-    axis.line = element_line(color = "#DADADA", linetype = "solid", linewidth = 0.25),
-    axis.ticks = element_line(color = "#36595F", linetype = "solid", linewidth = 0.25),
-    panel.grid.major = element_line(color = "#F0F0F0", linetype = "solid", linewidth = 0.25),
-    panel.grid.minor = element_line(color = "#F0F0F0", linetype = "dotted", linewidth = 0.15),
-
-    # Legend
-    legend.box.margin = margin(0.1, 0.1, 0.1, 0.1),
-    legend.position = c(0.8, 0.85),
-    legend.background = element_rect(fill = "#F0F0F0", color = "#b0b0b0", linewidth = 0.2, linetype = "solid"),
-    legend.key.size = unit(0.5, "cm"),
-    legend.title = element_text(color = "#36595F", family = "Helvetica Neue", face = "bold", size = rel(1)),
-    legend.text = element_text(color = "#36595F", family = "Helvetica Neue", face = "italic", size = rel(0.9))
-  )
-}
+pathways_breaks <- c(
+  "DNA metabolism",
+  "RNA metabolism",
+  "Immune response",
+  "Translation related",
+  "Other"
+)
 
 publication_theme <- {
   ggplot2::theme(
@@ -1179,39 +1207,57 @@ publication_theme <- {
   )
 }
 
-condition_colors <- c(
-  "dcSSc_ATAp" = "#d31f11",
-  "dcSSc_ATAn" = "#f47a00",
-  "lcSSc_ACA"  = "#007191",
-  "HC"         = "#50ad9f",
-  "NS"         = "#595959"
-)
-
-pathways_colors <- c(
-  "DNA metabolism & processing"      = "#2B7BBA",
-  "RNA metabolism & processing"      = "#D6A100",
-  "Translation & ribosome biology"   = "#21867A",
-  "Immune & stress response"         = "#E76F51",
-  "Other"                            = "#7B3F97"
-)
-
 plot_dim_reduction <- function(df_obj, base_path = "figures/01_exploratory_analysis/") {
   obj_name <- deparse(substitute(df_obj))
-
+  
   if (grepl("proteo", obj_name, ignore.case = TRUE)) {
     save_path <- paste0(base_path, "01_proteomics_datasets")
+    data <- df_obj$data
+    matrix_type <- df_obj$matrix_type
+    analysis_type <- tolower(df_obj$analysis_type)
+    
+    group <- make_proteo_cond_vector(matrix_type)
+    data$group <- group
+    
+    color_values <- proteo_cond_colors
+    color_breaks <- proteo_cond_levels
+    color_labels <- proteo_cond_labels_expr
+    
   } else {
     save_path <- paste0(base_path, "02_transcriptomics_dataset")
+    data <- df_obj$data
+    
+    matrix_type <- if (!is.null(df_obj$matrix_type)) {
+      df_obj$matrix_type
+    } else {
+      "transcriptomics"
+    }
+    
+    analysis_type <- if (!is.null(df_obj$analysis_type)) {
+      tolower(df_obj$analysis_type)
+    } else {
+      "pca"
+    }
+    
+    color_values <- transcripto_cond_colors
+    color_breaks <- transcripto_cond_levels
+    color_labels <- transcripto_cond_labels_expr
   }
-
+  
+  required_cols <- c("x", "y", "group")
+  missing_cols <- setdiff(required_cols, names(data))
+  
+  if (length(missing_cols) > 0) {
+    stop(
+      "df_obj$data is missing required columns: ",
+      paste(missing_cols, collapse = ", ")
+    )
+  }
+  
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
-
-  data <- df_obj$data
-  matrix_type <- df_obj$matrix_type
-  analysis_type <- tolower(df_obj$analysis_type)
-
+  
   if (analysis_type == "pca" && !is.null(df_obj$explained_var)) {
     x_lab <- paste0("Principal Component 1 (", round(df_obj$explained_var[1], 1), "% var. explained)")
     y_lab <- paste0("Principal Component 2 (", round(df_obj$explained_var[2], 1), "% var. explained)")
@@ -1225,17 +1271,30 @@ plot_dim_reduction <- function(df_obj, base_path = "figures/01_exploratory_analy
     x_lab <- "Component 1"
     y_lab <- "Component 2"
   }
-
-  # Shared symmetric limits for x and y
+  
   max_abs <- max(abs(c(data$x, data$y)), na.rm = TRUE)
+  
+  if (!is.finite(max_abs) || max_abs == 0) {
+    max_abs <- 1
+  }
+  
   max_abs <- ceiling(max_abs / 10) * 10
+  
+  if (max_abs == 0) {
+    max_abs <- 10
+  }
+  
   lims <- c(-max_abs, max_abs)
   axis_breaks <- seq(lims[1], lims[2], by = 10)
-
+  
   final_plot <- ggplot(data, aes(x = x, y = y, color = group)) +
     geom_point(size = 2.5) +
-    # stat_ellipse(level = 0.95) +
-    scale_color_manual(values = condition_colors) +
+    scale_color_manual(
+      values = color_values,
+      breaks = color_breaks,
+      labels = color_labels,
+      name = NULL
+    ) +
     labs(
       title = paste(toupper(analysis_type), "-", matrix_type),
       x = x_lab,
@@ -1246,7 +1305,7 @@ plot_dim_reduction <- function(df_obj, base_path = "figures/01_exploratory_analy
     coord_equal() +
     ggplot2::theme(
       plot.background = element_rect(fill = "#FFFFFF"),
-      panel.background = element_rect(fill = "#dee5e8"),
+      panel.background = element_rect(fill = "#F7F7F7"),
       plot.margin = margin(t = 5, r = 5, b = 5, l = 5, unit = "pt"),
       plot.title = element_text(
         color = "black", family = "Helvetica Neue", face = "bold",
@@ -1272,8 +1331,9 @@ plot_dim_reduction <- function(df_obj, base_path = "figures/01_exploratory_analy
       legend.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", size = rel(1)),
       legend.text = element_text(color = "black", family = "Helvetica Neue", face = "italic", size = rel(0.9))
     )
-
+  
   file_name <- paste0(matrix_type, "_", analysis_type, ".tiff")
+  
   ggsave(
     filename = file_name,
     plot = final_plot,
@@ -1284,9 +1344,9 @@ plot_dim_reduction <- function(df_obj, base_path = "figures/01_exploratory_analy
     dpi = 600,
     device = "tiff"
   )
-
+  
   message(paste(file_name, "saved in:", save_path))
-
+  
   return(final_plot)
 }
 
@@ -1381,12 +1441,14 @@ plot_enrich_integration <- function(enrich_list, base_path = "figures/03_enrichm
       mutate(
         logGSEA = -log10(gsea_padj + 1e-10),
         logORA = -log10(ora_padj + 1e-10),
-        co_signif = (logGSEA > thr & logORA > thr)
+        co_signif = (logGSEA > thr & logORA > thr),
+        pathway_relation = factor(pathway_relation, levels = pathways_breaks)
       )
 
     label_df <- df %>%
       filter(co_signif) %>%
       arrange(gsea_padj + ora_padj) %>%
+      mutate(pathway_relation = factor(pathway_relation, levels = pathways_breaks)) %>% 
       slice_head(n = 10)
 
     xmax_val <- max(df$logGSEA, na.rm = TRUE)
@@ -1402,7 +1464,7 @@ plot_enrich_integration <- function(enrich_list, base_path = "figures/03_enrichm
       db <- stringr::str_to_title(name_parts[1])
       comp <- name_parts[2]
       cond <- paste(name_parts[3:4], collapse = "_")
-      clean_subtitle <- paste0(toupper(db), " against ", cond, " (", comp, ")")
+      clean_subtitle <- paste0(toupper(db), " against ", cond, "diff. analysis results", "(", comp, ")")
     } else if (length(name_parts) == 3) {
       db <- stringr::str_to_title(name_parts[1])
       comp <- name_parts[2]
@@ -1414,22 +1476,22 @@ plot_enrich_integration <- function(enrich_list, base_path = "figures/03_enrichm
       ggplot2::geom_point(
         data = subset(df, !co_signif),
         ggplot2::aes(logGSEA, logORA),
-        color = "grey80", alpha = 0.4, size = 0.8, show.legend = FALSE
+        color = "grey80", alpha = 0.5, size = 0.8, show.legend = FALSE
       ) +
       ggplot2::annotate(
         "rect",
         xmin = thr, xmax = x_lim, ymin = thr, ymax = y_lim,
-        fill = "grey90", color = "grey35", linetype = "dashed", linewidth = 0.3, alpha = 0.4
+        fill = "#FFFFFF", color = "grey60", linetype = "dashed", linewidth = 0.2, alpha = 0.3
       ) +
       ggplot2::annotate(
         "text",
         x = x_lim, y = thr - 0.2, label = "co-significance area",
-        hjust = 1, size = 2.5, color = "grey35", fontface = "bold"
+        hjust = 1, size = 2, color = "grey60", fontface = "bold"
       ) +
       ggplot2::geom_point(
         data = subset(df, co_signif),
         ggplot2::aes(logGSEA, logORA, color = pathway_relation),
-        alpha = 0.75, size = 1.1
+        alpha = 0.70, size = 1
       ) +
       ggrepel::geom_label_repel(
         data = label_df,
@@ -1457,7 +1519,7 @@ plot_enrich_integration <- function(enrich_list, base_path = "figures/03_enrichm
         label.r = grid::unit(0.1, "lines"),
         label.size = 0.25,
         label.hjust = 0,
-        size = 2.5,
+        size = 2.25,
         fontface = "bold",
         family = "Helvetica Neue",
         segment.color = "grey60",
@@ -1466,7 +1528,9 @@ plot_enrich_integration <- function(enrich_list, base_path = "figures/03_enrichm
         segment.ncp = 1,
         show.legend = FALSE
       ) +
-      ggplot2::scale_color_manual(values = pathways_colors, drop = TRUE) +
+      ggplot2::scale_color_manual(values = pathways_colors, 
+                                  breaks = pathways_breaks, 
+                                  drop = TRUE) +
       ggplot2::coord_cartesian(xlim = c(0, x_lim), ylim = c(0, y_lim), clip = "off") +
       ggplot2::labs(
         title = "Enrichment analyses integration",
@@ -1477,7 +1541,7 @@ plot_enrich_integration <- function(enrich_list, base_path = "figures/03_enrichm
       ) +
       ggplot2::theme(
         plot.background = ggplot2::element_rect(fill = "#FFFFFF"),
-        panel.background = ggplot2::element_rect(fill = "#FFFFFF"),
+        panel.background = ggplot2::element_rect(fill = "#F7F7F7"),
         plot.margin = ggplot2::margin(5, 25, 5, 5, "pt"),
         plot.title = ggplot2::element_text(family = "Helvetica Neue", face = "bold", size = ggplot2::rel(1.5)),
         plot.subtitle = ggplot2::element_text(family = "Helvetica Neue", size = ggplot2::rel(1)),
@@ -1487,7 +1551,7 @@ plot_enrich_integration <- function(enrich_list, base_path = "figures/03_enrichm
         axis.text.y = ggplot2::element_text(family = "Helvetica Neue", size = ggplot2::rel(0.6)),
         axis.line = ggplot2::element_line(color = "grey35", linetype = "solid", linewidth = 0.25),
         panel.grid.major = ggplot2::element_line(color = "#F0F0F0", linetype = "solid", linewidth = 0.3),
-        panel.grid.minor = ggplot2::element_line(color = "#F0F0F0", linetype = "dotted", linewidth = 0.2),
+        panel.grid.minor = ggplot2::element_blank(),
         legend.position = "top",
         legend.background = ggplot2::element_rect(fill = "white"),
         legend.key.size = grid::unit(0.5, "cm"),
@@ -1516,6 +1580,7 @@ create_codex_volcano <- function(enrich_category,
                                  save_path = "figures/10_user_generated/") {
   toptable_name <- paste0(cell_compartment, "_", condition, "_HC")
   enrich_name <- paste0(db_name, "_", cell_compartment, "_", condition)
+  condition_label <- format_proteo_condition(condition)
 
   # Select enrichment data
   enrich_df <- proteo_master_enrich_data[[enrich_name]]
@@ -1642,6 +1707,8 @@ create_codex_enrichment <- function(enrich_category,
                                     save_path = "figures/10_user_generated/",
                                     padj_threshold = 0.05) {
   enrich_name <- paste0(db_name, "_", cell_compartment, "_", condition)
+  condition_label <- format_proteo_condition(condition)
+  
   df <- proteo_master_enrich_data[[enrich_name]]
   validate(need(!is.null(df), "No enrichment table found for this selection."))
 
@@ -1670,14 +1737,14 @@ create_codex_enrichment <- function(enrich_category,
   y_lim <- round(ymax_val + 3)
 
   # Subtitle should be based on enrich_name (not a pathway description)
-  name_parts <- strsplit(enrich_name, "_", fixed = TRUE)[[1]]
-  clean_subtitle <- enrich_name
-  if (length(name_parts) >= 3) {
-    db <- toupper(name_parts[1])
-    comp <- name_parts[2]
-    cond <- paste(name_parts[3:length(name_parts)], collapse = "_")
-    clean_subtitle <- paste0(db, " against ", cond, " (", comp, ")")
-  }
+  clean_subtitle <- paste0(
+    toupper(db_name),
+    " against ",
+    condition_label,
+    " (",
+    cell_compartment,
+    ")"
+  )
 
   df_nonsig <- dplyr::filter(df, !co_signif)
   df_sig <- dplyr::filter(df, co_signif)
@@ -1803,6 +1870,9 @@ create_dae_volcano <- function(toptables,
 
   # Build name and fetch table
   toptable_name <- paste0(cell_compartment, "_", condition_a, "_", condition_b)
+  condition_a_label <- format_proteo_condition(condition_a)
+  condition_b_label <- format_proteo_condition(condition_b)
+  
   tt <- toptables[[toptable_name]]
   if (is.null(tt)) stop("No toptable found for: ", toptable_name)
 
@@ -1875,7 +1945,7 @@ create_dae_volcano <- function(toptables,
     ggplot2::scale_x_continuous(breaks = seq(xlim[1], xlim[2], 2)) +
     ggplot2::scale_y_continuous(breaks = seq(ylim[1], ylim[2], 2)) +
     ggplot2::labs(
-      title = paste(cell_compartment, "-", condition_a, "vs.", condition_b),
+      title = paste(cell_compartment, "-", condition_a_label, "vs.", condition_b_label),
       subtitle = "Differential abundance (labeled = top effects among significant)",
       x = lfc_col,
       y = "-log10 adjusted p-value"
@@ -1902,7 +1972,12 @@ create_dae_volcano <- function(toptables,
 
   if (!is.null(save_path)) {
     if (!dir.exists(save_path)) dir.create(save_path, recursive = TRUE)
-    file_name <- paste0(cell_compartment, "_", condition_a, "_vs_", condition_b, "_volcano.png")
+    file_name <- paste0(
+      cell_compartment, "_",
+      safe_proteo_condition(condition_a), "_vs_",
+      safe_proteo_condition(condition_b),
+      "_volcano.png"
+    )
     ggplot2::ggsave(
       filename = file.path(save_path, file_name),
       plot = volcano_plot,

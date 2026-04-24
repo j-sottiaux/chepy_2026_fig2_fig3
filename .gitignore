@@ -51,3 +51,6 @@ rsconnect/
 #Other key folders
 /data
 /figures
+
+.DS_Store
+.positai

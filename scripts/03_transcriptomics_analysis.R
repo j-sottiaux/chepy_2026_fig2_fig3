@@ -11,12 +11,8 @@ library(pheatmap)
 library(DESeq2)
 library(ashr)
 
-## b. Reproducibility check ----
-gc()
-set.seed(12345)
-
-## c. Source functions ----
-source(file = "scripts/01_functions.R")
+## b. Source functions ----
+source("scripts/01_functions.R")
 
 
 # 2. Process transctiptomics dataset for DESeq2 -----
@@ -67,14 +63,47 @@ transcripto_sample_dist_matrix <- as.matrix(transcripto_sample_dist)
 rownames(transcripto_sample_dist_matrix) <- paste(transcripto_vsd$condition, sep = "-")
 colnames(transcripto_sample_dist_matrix) <- paste(transcripto_vsd$condition, sep = "-")
 
-plotDispEsts(transcripto_dds) # Ok
-plotPCA(transcripto_vsd, intgroup = "condition") # Ok, with caution due to low sample sizes
+## b. Transcriptomics PCA object for plot_dim_reduction() ----
+transcripto_vsd_mat <- SummarizedExperiment::assay(transcripto_vsd)
+
+transcripto_pca <- prcomp(
+  t(transcripto_vsd_mat),
+  center = TRUE,
+  scale. = FALSE
+)
+
+transcripto_pca_explained_var <- 100 * transcripto_pca$sdev^2 / sum(transcripto_pca$sdev^2)
+
+transcripto_pca_data <- as.data.frame(transcripto_pca$x[, 1:2, drop = FALSE]) %>%
+  tibble::rownames_to_column("sample_id") %>%
+  dplyr::rename(
+    x = PC1,
+    y = PC2
+  ) %>%
+  dplyr::left_join(
+    transcripto_metadata %>%
+      tibble::rownames_to_column("sample_id"),
+    by = "sample_id"
+  ) %>%
+  dplyr::mutate(
+    group = factor(condition, levels = c("ATA", "HC", "IFNa"))
+  )
+
+transcripto_pca_obj <- list(
+  data = transcripto_pca_data,
+  explained_var = transcripto_pca_explained_var,
+  matrix_type = "transcriptomics",
+  analysis_type = "pca"
+)
+
+plot_dim_reduction(transcripto_pca_obj)
+
 pheatmap(transcripto_sample_dist_matrix,
   clustering_distance_cols = transcripto_sample_dist,
   clustering_distance_rows = transcripto_sample_dist,
 )
 
-## b. Extract results + QC for visualizations and enrichment analysis ----
+## c. Extract results + QC for visualizations and enrichment analysis ----
 transcripto_ATA_vs_HC_res <- extract_DESeq2_results(transcripto_dds, condition_1 = "ATA", condition_2 = "HC")
 transcripto_ATA_vs_HC_qc <- hist(transcripto_ATA_vs_HC_res$pvalue,
   main = "raw p-values histogram - ATA vs HC",

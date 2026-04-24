@@ -17,9 +17,8 @@ library(limma)
 library(ashr)
 library(clusterProfiler)
 
-## b. Reproducibility check ----
-gc()
-set.seed(12345)
+## b. Source functions script ----
+source("scripts/01_functions.R")
 
 ## c. Significance thresholds ----
 padj_threshold <- 0.05
@@ -32,34 +31,6 @@ max_genecount_cutoff <- 250
 permutations_gsea <- 50000
 multiple_testing_correction <- "BH"
 eps_limit_gsea <- 1e-30
-
-## e. Biological conditions design ----
-cytoATAp <- 1:10
-nuclATAp <- c(1, 3:10)
-ATAn <- 11:20
-ACA <- 21:30
-HC <- 31:40
-cytoNS <- 41:44
-nuclNS <- 41:45
-
-cytoplasm_groups <- c(
-  rep("dcSSc_ATAp", length(cytoATAp)),
-  rep("dcSSc_ATAn", length(ATAn)),
-  rep("lcSSc_ACA", length(ACA)),
-  rep("HC", length(HC)),
-  rep("NS", length(cytoNS))
-)
-
-nucleus_groups <- c(
-  rep("dcSSc_ATAp", length(nuclATAp)),
-  rep("dcSSc_ATAn", length(ATAn)),
-  rep("lcSSc_ACA", length(ACA)),
-  rep("HC", length(HC)),
-  rep("NS", length(nuclNS))
-)
-
-## f. Source functions script ----
-source(file = "scripts/01_functions.R")
 
 
 # 2. Process proteomic LFQ datasets -----

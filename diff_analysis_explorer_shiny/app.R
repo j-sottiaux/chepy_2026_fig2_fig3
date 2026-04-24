@@ -17,15 +17,20 @@ gc()
 set.seed(12345)
 
 # Source functions + data ----
-source(file = "scripts/01_functions.R")
+source("scripts/01_functions.R")
+
+conditions <- c("ATAp", "ATAn", "ACA", "HC", "NS")
+condition_choices <- setNames(
+  conditions,
+  unname(proteo_cond_labels[conditions])
+)
 
 stopifnot(exists("proteo_toptables_extended", inherits = TRUE))
 stopifnot(exists("create_dae_volcano", inherits = TRUE))
 stopifnot(exists("logFC_threshold", inherits = TRUE))
 stopifnot(exists("padj_threshold", inherits = TRUE))
 
-app_version <- "v1.1.0"
-conditions <- c("dcSSc_ATAp", "dcSSc_ATAn", "lcSSc_ACA", "HC", "NS")
+app_version <- "v1.3.2"
 
 # Theme ----
 theme_dae <- bs_theme(
@@ -122,14 +127,14 @@ ui <- page_fillable(
           pickerInput(
             "cond_a",
             tags$strong("2️⃣ Condition A"),
-            choices = conditions,
-            selected = "dcSSc_ATAp"
+            choices = condition_choices,
+            selected = "ATAp"
           ),
           hr(),
           pickerInput(
             "cond_b",
             tags$strong("3️⃣ Condition B"),
-            choices = conditions,
+            choices = condition_choices,
             selected = "HC"
           ),
           hr(),
@@ -277,7 +282,12 @@ server <- function(input, output, session) {
       tags$strong("Volcano plot"),
       tags$span(
         style = "opacity:.75; font-weight:400; margin-left:8px;",
-        paste0(toupper(input$cell_comp), " / ", input$cond_a, " vs ", input$cond_b)
+        paste0(
+          toupper(input$cell_comp), " / ",
+          format_proteo_condition(input$cond_a),
+          " vs ",
+          format_proteo_condition(input$cond_b)
+        )
       )
     )
 
@@ -411,7 +421,13 @@ server <- function(input, output, session) {
 
   output$dl_volcano_png <- downloadHandler(
     filename = function() {
-      paste0("DAE_", input$cell_comp, "_", input$cond_a, "_vs_", input$cond_b, ".png")
+      paste0(
+        "DAE_",
+        input$cell_comp, "_",
+        safe_proteo_condition(input$cond_a), "_vs_",
+        safe_proteo_condition(input$cond_b),
+        ".png"
+      )
     },
     content = function(file) {
       req(rv$volcano_plot)
