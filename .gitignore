@@ -48,9 +48,8 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
-#Other key folders
+#Other key folders and files
 /data
 /figures
-
 .DS_Store
 .positai
