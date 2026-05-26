@@ -146,6 +146,7 @@ transcripto_toptables_viz <- lapply(transcripto_viz, map_gene_symbols)
 
 ## e. Visualization ----
 create_volcano_transcripto(transcripto_toptables_viz)
+
 create_heatmaps_transcripto(
   toptables = transcripto_toptables_res,
   vsd = transcripto_vsd

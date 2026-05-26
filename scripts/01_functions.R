@@ -610,25 +610,13 @@ RNA_pathways_labels <- paste(
 )
 
 DNA_pathways_labels <- paste(
-  "DNA", "G2 M", "G2", "G1", "M PHASE", "MITOTIC", "CELL CYCLE",
+  "DNA", "G2 M", "G2", "M PHASE", "MITOTIC", "CELL CYCLE",
   "TELOMERE MAINTENANCE", "TELOMERE ORGANIZATION", "TELOMERASE", "TELOMERIC REGION",
   "CHROMOSOME", "CHROMATIN", "CHROMATIDS", "DOUBLE STRAND",
   sep = "|"
 )
 
-translation_pathways_labels <- paste(
-  "RIBOSOME", "AMINO ACIDS", "SELENOAMINO", "AMINO ACID",
-  "TRANSLATION", "PEPTIDE BIOSYNTHESIS", "CYTOPLASMIC TRANSLATION",
-  "RIBONUCLEOPROTEIN", "RIBOSOME BIOGENESIS",
-  sep = "|"
-)
-
-immunity_pathways_labels <- paste(
-  "ISG15 ANTIVIRAL MECHANISM", "IMMUNE", "ANTIVIRAL", "SLITS", "ROBO", "P53", "INTERFERON", "IFN", "INTERLEUKIN", "IL", "NF KB",
-  "B CELL", "T CELL", "BCR", "TCR", "MHC", "ANTIGEN PROCESSING", "DEFENSE RESPONSE",
-  "CELL KILLING", "RESPONSE TO VIRUS", "VIRUS", "VIRAL", "INFECTION", "COVID", "INFLUENZA", "STRESS RESPONSE", "STARVATION", "CELL DEATH",
-  "FIBROSIS", "HEDGEHOG", "APOPTOSIS",
-  sep = "|"
+immunity_pathways_labels <- paste("ISG15", "IMMUNE", "AMPA", "ANTIVIRAL", "SLITS", "ROBO", "P53", "INTERFERON", "IFN", "INTERLEUKIN", "IL", "NF KB", "HIV", "TRAF6", "B CELL", "T CELL", "BCR", "TCR", "MHC", "ANTIGEN PROCESSING", "DEFENSE RESPONSE", "CELL KILLING", "RESPONSE TO VIRUS", "VIRUS", "VIRAL", "INFECTION", "COVID", "INFLUENZA", "STRESS RESPONSE", "STARVATION", "CELL DEATH", "FIBROSIS", "HEDGEHOG", "APOPTOSIS", sep = "|"
 )
 
 
@@ -640,7 +628,6 @@ categorize_pathway <- function(description) {
   case_when(
     str_detect(description, regex(RNA_pathways_labels, ignore_case = TRUE)) ~ "RNA metabolism",
     str_detect(description, regex(DNA_pathways_labels, ignore_case = TRUE)) ~ "DNA metabolism",
-    str_detect(description, regex(translation_pathways_labels, ignore_case = TRUE)) ~ "Translation related",
     str_detect(description, regex(immunity_pathways_labels, ignore_case = TRUE)) ~ "Immune response",
     TRUE ~ "Other"
   )
@@ -1164,18 +1151,16 @@ process_codex_data <- function(
 
 # 6. Data visualization functions -----
 pathways_colors <- c(
-  "DNA metabolism"       = "#BC272D",  
-  "RNA metabolism"       = "#0D7D87",  
-  "Translation related"  = "#50AD9F",
-  "Immune response"      = "#C99B38",  
-  "Other"                = "grey48"  
+  "DNA metabolism"       = "#dd2233",  
+  "RNA metabolism"       = "#11a3b0",  
+  "Immune response"      = "#cc8d3e",  
+  "Other"                = "#a09abf"  
 )
 
 pathways_breaks <- c(
   "DNA metabolism",
   "RNA metabolism",
   "Immune response",
-  "Translation related",
   "Other"
 )
 
@@ -1185,17 +1170,17 @@ publication_theme <- {
     plot.background = element_rect(fill = "#FFFFFF"),
     panel.background = element_rect(fill = "#FFFFFF"),
     plot.margin = margin(t = 10, r = 10, b = 10, l = 10, unit = "pt"),
-    plot.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(1.5)),
-    plot.subtitle = element_text(color = "black", family = "Helvetica Neue", hjust = 0, size = rel(1)),
+    plot.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(2)),
+    plot.subtitle = element_text(color = "black", family = "Helvetica Neue", hjust = 0, size = rel(1.25)),
 
     # Axis titles and texts
-    axis.title.x = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)),
-    axis.text.x = element_text(color = "black", family = "Helvetica Neue", size = rel(0.8), angle = 0, hjust = 0.5),
-    axis.title.y = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)), ,
-    axis.text.y = element_text(color = "black", family = "Helvetica Neue", size = rel(0.8), angle = 0, hjust = 0.5),
+    axis.title.x = element_text(color = "black", family = "Helvetica Neue", size = rel(1.5)),
+    axis.text.x = element_text(color = "black", family = "Helvetica Neue", size = rel(1), angle = 0, hjust = 0.5),
+    axis.title.y = element_text(color = "black", family = "Helvetica Neue", size = rel(1.5)), ,
+    axis.text.y = element_text(color = "black", family = "Helvetica Neue", size = rel(1), angle = 0, hjust = 0.5),
     axis.line = element_line(color = "#5f5f5f", linetype = "solid", linewidth = 0.25),
     axis.ticks = element_line(color = "black", linetype = "solid", linewidth = 0.25),
-    panel.grid.major = element_line(color = "#EAEAEA", linetype = "dotted", linewidth = 0.25),
+    panel.grid.major = element_line(color = "grey95", linetype = "solid", linewidth = 0.3),
 
     # Legend
     legend.box.margin = margin(0.1, 0.1, 0.1, 0.1),
@@ -1288,7 +1273,7 @@ plot_dim_reduction <- function(df_obj, base_path = "figures/01_exploratory_analy
   axis_breaks <- seq(lims[1], lims[2], by = 10)
   
   final_plot <- ggplot(data, aes(x = x, y = y, color = group)) +
-    geom_point(size = 2.5) +
+    geom_point(size = 3.5) +
     scale_color_manual(
       values = color_values,
       breaks = color_breaks,
@@ -1305,31 +1290,31 @@ plot_dim_reduction <- function(df_obj, base_path = "figures/01_exploratory_analy
     coord_equal() +
     ggplot2::theme(
       plot.background = element_rect(fill = "#FFFFFF"),
-      panel.background = element_rect(fill = "#F7F7F7"),
+      panel.background = element_rect(fill = "#FFFFFF"),
       plot.margin = margin(t = 5, r = 5, b = 5, l = 5, unit = "pt"),
       plot.title = element_text(
         color = "black", family = "Helvetica Neue", face = "bold",
-        hjust = 0, size = rel(2), margin = margin(b = 4)
+        hjust = 0, size = rel(2.75), margin = margin(b = 4)
       ),
       plot.subtitle = element_text(
         color = "black", family = "Helvetica Neue",
         hjust = 0, size = rel(1.2), margin = margin(b = 2)
       ),
-      axis.title.x = element_text(color = "black", family = "Helvetica Neue", size = rel(1)),
-      axis.text.x = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)),
-      axis.title.y = element_text(color = "black", family = "Helvetica Neue", size = rel(1)),
-      axis.text.y = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)),
-      axis.line = element_line(color = "#5f5f5f", linewidth = 0.25),
-      axis.ticks = element_line(color = "black", linewidth = 0.25),
-      panel.grid.major = element_line(color = "#EAEAEA", linetype = "solid", linewidth = 0.5),
+      axis.title.x = element_text(color = "black", family = "Helvetica Neue", size = rel(1.5)),
+      axis.text.x = element_text(color = "black", family = "Helvetica Neue", size = rel(1)),
+      axis.title.y = element_text(color = "black", family = "Helvetica Neue", size = rel(1.5)),
+      axis.text.y = element_text(color = "black", family = "Helvetica Neue", size = rel(1)),
+      axis.line = element_line(color = "#5f5f5f", linewidth = 0.30),
+      axis.ticks = element_line(color = "black", linewidth = 0.30),
+      panel.grid.major = element_line(color = "grey85", linetype = "solid", linewidth = 0.3),
       panel.grid.minor = element_blank(),
       legend.position = "top",
       legend.margin = margin(1, 1, 1, 1),
       legend.box.margin = margin(1, 1, 1, 1),
       legend.background = element_rect(fill = "#FFFFFF", linewidth = 0.1),
-      legend.key.size = unit(0.35, "cm"),
+      legend.key.size = unit(0.5, "cm"),
       legend.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", size = rel(1)),
-      legend.text = element_text(color = "black", family = "Helvetica Neue", face = "italic", size = rel(0.9))
+      legend.text = element_text(color = "black", family = "Helvetica Neue", face = "italic", size = rel(1.5))
     )
   
   file_name <- paste0(matrix_type, "_", analysis_type, ".tiff")
@@ -1375,7 +1360,7 @@ create_volcano_plots <- function(toptables, save_path = "figures/02_differential
 
     # Generate the volcano plot
     volcano_df <- ggplot(df, aes(x = logFC_shrunk, y = -log10(adj.P.Val), color = diffexpressed, label = gene_label)) +
-      geom_point(size = 0.9, alpha = 0.5) +
+      geom_point(size = 0.8, alpha = 0.8) +
       geom_vline(xintercept = c(-logFC_threshold, logFC_threshold), col = "#dd9d6b", linetype = "dashed") +
       geom_hline(yintercept = -log10(padj_threshold), col = "#dd9d6b", linetype = "dashed") +
       scale_color_manual(
@@ -1385,7 +1370,10 @@ create_volcano_plots <- function(toptables, save_path = "figures/02_differential
       ) +
       geom_label_repel(
         aes(label = gene_label),
-        size = 2.2,
+        size = 3.5,
+        fontface = "bold",
+        label_size= 3,
+        label.padding = 0.25,
         box.padding = 0.25,
         segment.color = "#d7d7d7",
         max.overlaps = Inf,
@@ -1419,155 +1407,306 @@ create_volcano_plots <- function(toptables, save_path = "figures/02_differential
   })
 }
 
-plot_enrich_integration <- function(enrich_list, base_path = "figures/03_enrichments_integration/") {
+plot_enrich_integration <- function(
+    enrich_list,
+    base_path = "figures/03_enrichments_integration/",
+    n_labels = 5,
+    label_wrap_width = 30,
+    skip_empty = TRUE
+) {
   obj_name <- deparse(substitute(enrich_list))
-
+  
   if (grepl("proteo", obj_name, ignore.case = TRUE)) {
     save_path <- paste0(base_path, "01_proteomics_datasets")
   } else {
     save_path <- paste0(base_path, "02_transcriptomics_dataset")
   }
-
+  
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
-
+  
   lapply(names(enrich_list), function(integration_df) {
+    
     df <- enrich_list[[integration_df]]
     thr <- -log10(padj_threshold)
-
-    # Clean up labels + compute metrics
+    
+    # Compute plotting metrics
     df <- df %>%
-      mutate(
+      dplyr::mutate(
         logGSEA = -log10(gsea_padj + 1e-10),
         logORA = -log10(ora_padj + 1e-10),
-        co_signif = (logGSEA > thr & logORA > thr),
+        co_signif = logGSEA > thr & logORA > thr,
         pathway_relation = factor(pathway_relation, levels = pathways_breaks)
       )
-
+    
+    if (skip_empty && !any(df$co_signif, na.rm = TRUE)) {
+      message(sprintf("skipped: %s — no co-significant pathways", integration_df))
+      return(NULL)
+    }
+    
+    # Define plotting limits from the biologically relevant region only
+    limit_df <- df %>%
+      dplyr::filter(co_signif)
+    
+    # Fallback if no co-significant pathways exist
+    if (nrow(limit_df) == 0) {
+      limit_df <- df %>%
+        dplyr::filter(logGSEA >= thr | logORA >= thr)
+    }
+    
+    if (nrow(limit_df) == 0) {
+      x_lim <- ceiling(thr + 1)
+      y_lim <- ceiling(thr + 1)
+    } else {
+      x_lim <- ceiling(max(limit_df$logGSEA, na.rm = TRUE) + 0.5)
+      y_lim <- ceiling(max(limit_df$logORA, na.rm = TRUE) + 0.5)
+    }
+    
+    # Ensure the co-significance box is always visible
+    x_lim <- max(x_lim, ceiling(thr + 0.5))
+    y_lim <- max(y_lim, ceiling(thr + 0.5))
+    
+    # Keep a small panel buffer, but place labels outside the panel
+    x_panel_lim <- x_lim
+    x_label <- x_panel_lim + 0.25
+    
+    # Build label data after x limits are known
     label_df <- df %>%
-      filter(co_signif) %>%
-      arrange(gsea_padj + ora_padj) %>%
-      mutate(pathway_relation = factor(pathway_relation, levels = pathways_breaks)) %>% 
-      slice_head(n = 10)
-
-    xmax_val <- max(df$logGSEA, na.rm = TRUE)
-    ymax_val <- max(df$logORA, na.rm = TRUE)
-
-    x_lim <- round((xmax_val + 3))
-    y_lim <- round((ymax_val + 3))
-
-    # Extract clean title components
+      dplyr::filter(co_signif) %>%
+      dplyr::mutate(
+        label_score = pmin(logGSEA, logORA),
+        label_secondary_score = logGSEA + logORA,
+        label = stringr::str_wrap(Description, width = label_wrap_width)
+      ) %>%
+      dplyr::arrange(
+        dplyr::desc(label_score),
+        dplyr::desc(label_secondary_score)
+      ) %>%
+      dplyr::slice_head(n = n_labels) %>%
+      dplyr::arrange(dplyr::desc(logORA)) %>%
+      dplyr::mutate(
+        label_x = x_label,
+        label_y = seq(
+          from = y_lim - 0.35,
+          to = max(thr + 0.25, 0.45),
+          length.out = dplyr::n()
+        )
+      )
+    
+    # Extract clean subtitle components
     name_parts <- strsplit(integration_df, "_", fixed = TRUE)[[1]]
     clean_subtitle <- integration_df
+    
     if (length(name_parts) == 4) {
       db <- stringr::str_to_title(name_parts[1])
       comp <- name_parts[2]
       cond <- paste(name_parts[3:4], collapse = "_")
-      clean_subtitle <- paste0(toupper(db), " against ", cond, "diff. analysis results", "(", comp, ")")
+      clean_subtitle <- paste0(
+        toupper(db),
+        " against ",
+        cond,
+        " diff. analysis results",
+        " (",
+        comp,
+        ")"
+      )
     } else if (length(name_parts) == 3) {
       db <- stringr::str_to_title(name_parts[1])
       comp <- name_parts[2]
       cond <- name_parts[3]
-      clean_subtitle <- paste0(toupper(db), " against ", cond, " (", comp, ")")
+      clean_subtitle <- paste0(
+        toupper(db),
+        " against ",
+        cond,
+        " (",
+        comp,
+        ")"
+      )
     }
-
+    
     enrichplot <- ggplot2::ggplot() +
+      
+      # Non-co-significant background points
       ggplot2::geom_point(
         data = subset(df, !co_signif),
-        ggplot2::aes(logGSEA, logORA),
-        color = "grey80", alpha = 0.5, size = 0.8, show.legend = FALSE
+        ggplot2::aes(x = logGSEA, y = logORA),
+        color = "grey35",
+        alpha = 0.35,
+        size = 1,
+        show.legend = FALSE
       ) +
+      
+      # Co-significance area
       ggplot2::annotate(
         "rect",
-        xmin = thr, xmax = x_lim, ymin = thr, ymax = y_lim,
-        fill = "#FFFFFF", color = "grey60", linetype = "dashed", linewidth = 0.2, alpha = 0.3
+        xmin = thr,
+        xmax = x_lim,
+        ymin = thr,
+        ymax = y_lim,
+        fill = "#FFFFFF",
+        color = "#dd9d6b",
+        linetype = "dashed"
       ) +
+      
       ggplot2::annotate(
         "text",
-        x = x_lim, y = thr - 0.2, label = "co-significance area",
-        hjust = 1, size = 2, color = "grey60", fontface = "bold"
+        x = x_lim - 0.12,
+        y = thr + 0.40,
+        label = "co-significance area",
+        hjust = 1,
+        size = 2.5,
+        color = "#dd9d6b",
+        fontface = "bold"
       ) +
-      ggplot2::geom_point(
-        data = subset(df, co_signif),
-        ggplot2::aes(logGSEA, logORA, color = pathway_relation),
-        alpha = 0.70, size = 1
-      ) +
-      ggrepel::geom_label_repel(
+      
+      # Connector segments from points to the right-side panel boundary
+      ggplot2::geom_segment(
         data = label_df,
         ggplot2::aes(
           x = logGSEA,
           y = logORA,
-          label = Description,
+          xend = x_label- 0.05,
+          yend = label_y,
           color = pathway_relation
         ),
-
-        # placement controls
-        min.segment.length = 0.1,
-        force = 1,
-        force_pull = 0.01,
-        seed = 123,
-        nudge_x = (xmax_val),
-        hjust = 0.5,
-        max.overlaps = Inf,
-        direction = "y",
-
-        # visual harmony
-        point.padding = 0.15,
-        box.padding = 0.25,
-        label.padding = grid::unit(0.15, "lines"),
-        label.r = grid::unit(0.1, "lines"),
-        label.size = 0.25,
-        label.hjust = 0,
-        size = 2.25,
-        fontface = "bold",
-        family = "Helvetica Neue",
-        segment.color = "grey60",
-        segment.size = 0.20,
-        segment.curvature = 0,
-        segment.ncp = 1,
+        linewidth = 0.25,
+        alpha = 0.85,
         show.legend = FALSE
       ) +
-      ggplot2::scale_color_manual(values = pathways_colors, 
-                                  breaks = pathways_breaks, 
-                                  drop = TRUE) +
-      ggplot2::coord_cartesian(xlim = c(0, x_lim), ylim = c(0, y_lim), clip = "off") +
+      
+      # Co-significant points
+      ggplot2::geom_point(
+        data = subset(df, co_signif),
+        ggplot2::aes(
+          x = logGSEA,
+          y = logORA,
+          color = pathway_relation
+        ),
+        alpha = 1,
+        size = 2.25
+      ) +
+      
+      # Labels outside the panel
+      ggplot2::geom_text(
+        data = label_df,
+        ggplot2::aes(
+          x = label_x,
+          y = label_y,
+          label = label,
+          color = pathway_relation
+        ),
+        hjust = 0,
+        size = 3,
+        family = "Helvetica Neue",
+        fontface = "bold",
+        lineheight = 1,
+        show.legend = FALSE
+      ) +
+      
+      ggplot2::scale_color_manual(
+        values = pathways_colors,
+        breaks = pathways_breaks,
+        drop = TRUE
+      ) +
+      
+      ggplot2::guides(
+        color = ggplot2::guide_legend(
+          override.aes = list(size = 2, alpha = 1)
+        )
+      ) +
+      
+      ggplot2::coord_cartesian(
+        xlim = c(0, x_panel_lim),
+        ylim = c(0, y_lim),
+        clip = "off"
+      ) +
+      
+      ggplot2::scale_x_continuous(
+        breaks = seq(0, x_lim, 1)
+      ) +
+      
+      ggplot2::scale_y_continuous(
+        breaks = seq(0, y_lim, 1)
+      ) +
+      
       ggplot2::labs(
         title = "Enrichment analyses integration",
-        subtitle = bquote(.(clean_subtitle) ~ "/" ~ italic("top 10 co-significant pathways labeled")),
+        subtitle = bquote(
+          .(clean_subtitle) ~ "/" ~ italic(.(paste0("top ", n_labels, " co-significant pathways labeled")))
+        ),
         x = expression(-log[10]("GSEA padj")),
         y = expression(-log[10]("ORA padj")),
-        color = "Pathway Category"
+        color = NULL
       ) +
+      
       ggplot2::theme(
-        plot.background = ggplot2::element_rect(fill = "#FFFFFF"),
-        panel.background = ggplot2::element_rect(fill = "#F7F7F7"),
-        plot.margin = ggplot2::margin(5, 25, 5, 5, "pt"),
-        plot.title = ggplot2::element_text(family = "Helvetica Neue", face = "bold", size = ggplot2::rel(1.5)),
-        plot.subtitle = ggplot2::element_text(family = "Helvetica Neue", size = ggplot2::rel(1)),
-        axis.title.x = ggplot2::element_text(family = "Helvetica Neue", size = ggplot2::rel(0.8)),
-        axis.title.y = ggplot2::element_text(family = "Helvetica Neue", size = ggplot2::rel(0.8)),
-        axis.text.x = ggplot2::element_text(family = "Helvetica Neue", size = ggplot2::rel(0.6)),
-        axis.text.y = ggplot2::element_text(family = "Helvetica Neue", size = ggplot2::rel(0.6)),
-        axis.line = ggplot2::element_line(color = "grey35", linetype = "solid", linewidth = 0.25),
-        panel.grid.major = ggplot2::element_line(color = "#F0F0F0", linetype = "solid", linewidth = 0.3),
+        plot.background = ggplot2::element_rect(fill = "#FFFFFF", color = NA),
+        panel.background = ggplot2::element_rect(fill = "#e4ecf5", color = NA),
+        plot.margin = ggplot2::margin(2, 170, 2, 2, "pt"),
+        plot.title = ggplot2::element_text(
+          family = "Helvetica Neue",
+          face = "bold",
+          size = ggplot2::rel(1.5)
+        ),
+        plot.subtitle = ggplot2::element_text(
+          family = "Helvetica Neue",
+          size = ggplot2::rel(1)
+        ),
+        axis.title.x = ggplot2::element_text(
+          family = "Helvetica Neue",
+          size = ggplot2::rel(1.25)
+        ),
+        axis.title.y = ggplot2::element_text(
+          family = "Helvetica Neue",
+          size = ggplot2::rel(1.25)
+        ),
+        axis.text.x = ggplot2::element_text(
+          family = "Helvetica Neue",
+          size = ggplot2::rel(1)
+        ),
+        axis.text.y = ggplot2::element_text(
+          family = "Helvetica Neue",
+          size = ggplot2::rel(1)
+        ),
+        axis.line = ggplot2::element_line(
+          color = "#5f5f5f",
+          linetype = "solid",
+          linewidth = 0.25
+        ),
+        panel.grid.major = ggplot2::element_line(
+          color = "#FFFFFF",
+          linetype = "solid",
+          linewidth = 0.4
+        ),
         panel.grid.minor = ggplot2::element_blank(),
         legend.position = "top",
-        legend.background = ggplot2::element_rect(fill = "white"),
-        legend.key.size = grid::unit(0.5, "cm"),
-        legend.title = ggplot2::element_text(family = "Helvetica Neue", face = "bold", size = ggplot2::rel(0.6)),
-        legend.text = ggplot2::element_text(family = "Helvetica Neue", face = "italic", size = ggplot2::rel(0.6))
+        legend.background = ggplot2::element_rect(fill = "white", color = NA),
+        legend.key = ggplot2::element_blank(),
+        legend.key.size = grid::unit(0.45, "cm"),
+        legend.text = ggplot2::element_text(
+          family = "Helvetica Neue",
+          face = "italic",
+          size = ggplot2::rel(0.85)
+        ),
+        legend.title = ggplot2::element_blank()
       )
-
+    
     file_name <- paste0(integration_df, "_enrich_integration_plot.tiff")
+    
     ggplot2::ggsave(
       filename = file_name,
       plot = enrichplot,
       path = save_path,
-      width = 8, height = 6, units = "in",
-      dpi = 600, device = "tiff"
+      width = 7.5,
+      height = 4.5,
+      units = "in",
+      dpi = 600,
+      device = "tiff"
     )
+    
     message(sprintf("saved: %s/%s", save_path, file_name))
+    
     enrichplot
   })
 }
@@ -1989,27 +2128,27 @@ create_dae_volcano <- function(toptables,
 }
 
 create_heatmaps_transcripto <- function(
-  toptables,
-  vsd,
-  id_col = "ensembl_id",
-  symbol_col = "gene_id",
-  top_n = 25,
-  save_path = "figures/02_differential_analysis/02_transcriptomics_dataset/"
+    toptables,
+    vsd,
+    id_col = "ensembl_id",
+    symbol_col = "gene_id",
+    top_n = 25,
+    save_path = "figures/02_differential_analysis/02_transcriptomics_dataset/"
 ) {
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   }
-
+  
   vsd_mat <- assay(vsd)
   annotation_col <- as.data.frame(colData(vsd)[, "condition", drop = FALSE])
   annotation_col <- annotation_col[colnames(vsd_mat), , drop = FALSE]
-
+  
   group_sizes <- table(annotation_col$condition)
   gaps_col <- cumsum(group_sizes)[-length(group_sizes)]
-
+  
   res_list <- lapply(names(toptables), function(name) {
     df <- toptables[[name]]
-
+    
     fc_col <- if ("logFC" %in% colnames(df)) {
       "logFC"
     } else if ("log2FoldChange" %in% colnames(df)) {
@@ -2017,15 +2156,15 @@ create_heatmaps_transcripto <- function(
     } else {
       stop("No fold-change column found in ", name)
     }
-
+    
     if (!id_col %in% colnames(df)) {
       stop("Column '", id_col, "' not found in ", name)
     }
-
+    
     if (!"padj" %in% colnames(df)) {
       stop("Column 'padj' not found in ", name)
     }
-
+    
     df_sig <- df %>%
       dplyr::filter(
         !is.na(.data[[fc_col]]),
@@ -2036,37 +2175,37 @@ create_heatmaps_transcripto <- function(
       ) %>%
       dplyr::arrange(.data$padj, dplyr::desc(abs(.data[[fc_col]]))) %>%
       dplyr::slice_head(n = top_n)
-
+    
     if (nrow(df_sig) == 0) {
       message("No significant genes for ", name)
       return(NULL)
     }
-
+    
     keep_ids <- df_sig[[id_col]][df_sig[[id_col]] %in% rownames(vsd_mat)]
-
+    
     if (length(keep_ids) == 0) {
       message("No matching IDs found in vsd for ", name)
       return(NULL)
     }
-
+    
     df_sig <- df_sig[match(keep_ids, df_sig[[id_col]]), , drop = FALSE]
     mat <- vsd_mat[keep_ids, , drop = FALSE]
     mat <- mat[, rownames(annotation_col), drop = FALSE]
-
+    
     mat <- mat[apply(mat, 1, sd, na.rm = TRUE) > 0, , drop = FALSE]
-
+    
     if (nrow(mat) == 0) {
       message("No variable genes left for ", name)
       return(NULL)
     }
-
+    
     if (symbol_col %in% colnames(df_sig)) {
       rownames(mat) <- make.unique(as.character(df_sig[[symbol_col]][match(rownames(mat), df_sig[[id_col]])]))
     }
-
+    
     mat_scaled <- t(scale(t(mat)))
-
-    pheatmap::pheatmap(
+    
+    ph <- pheatmap::pheatmap(
       mat_scaled,
       annotation_col = annotation_col,
       annotation_names_col = FALSE,
@@ -2076,17 +2215,40 @@ create_heatmaps_transcripto <- function(
       border_color = "grey85",
       show_rownames = TRUE,
       show_colnames = TRUE,
-      fontsize_row = 7,
+      fontsize = 12,
+      fontsize_row = 12,
+      fontsize_col = 10,
       main = paste0(name, " - top ", nrow(mat_scaled), " DE genes"),
-      filename = file.path(save_path, paste0("heatmap_", name, ".png")),
-      width = 6,
+      filename = NA,
+      width = 8,
       height = 8
     )
-
+    
+    for (i in seq_along(ph$gtable$grobs)) {
+      if (ph$gtable$grobs[[i]]$name %in% c("row_names", "col_names")) {
+        ph$gtable$grobs[[i]]$gp <- grid::gpar(
+          fontsize = 10,
+          fontface = "bold"
+        )
+      }
+    }
+    
+    png(
+      filename = file.path(save_path, paste0("heatmap_", name, ".png")),
+      width = 6,
+      height = 8,
+      units = "in",
+      res = 300
+    )
+    
+    grid::grid.newpage()
+    grid::grid.draw(ph$gtable)
+    dev.off()
+    
     message("heatmap_", name, ".png saved in: ", save_path)
     invisible(mat_scaled)
   })
-
+  
   names(res_list) <- names(toptables)
   invisible(res_list)
 }
@@ -2125,24 +2287,28 @@ create_volcano_transcripto <- function(toptables, save_path = "figures/02_differ
 
     # Generate the volcano plot
     volcano_df <- ggplot(df, aes(x = logFC, y = -log10(padj), color = diffexpressed, label = gene_label)) +
-      geom_point(size = 0.9, alpha = 0.5) +
+      geom_point(size = 1, alpha = 0.5) +
       geom_vline(xintercept = c(-logFC_threshold, logFC_threshold), col = "#dd9d6b", linetype = "dashed") +
       geom_hline(yintercept = -log10(padj_threshold), col = "#dd9d6b", linetype = "dashed") +
       scale_color_manual(
         name = "Differential abundance",
         values = c("down" = "#189392", "no" = "#dcdbc8", "up" = "#c43a50"),
-        labels = c("Decreased", "No significant", "Increased")
+        labels = c("No significant", "Increased")
       ) +
       geom_label_repel(
         aes(label = gene_label),
-        size = 2.2,
-        box.padding = 0.25,
+        size = 4,
+        fontface = "bold",
+        label_size= 3,
+        label.padding = 0.25,
+        box.padding = 0.2,
         segment.color = "#d7d7d7",
         max.overlaps = Inf,
-        show.legend = FALSE
+        show.legend = FALSE,
+        nudge_x = 3
       ) +
-      coord_cartesian(ylim = c(0, 175), xlim = c(-10, 10)) +
-      scale_x_continuous(breaks = seq(-10, 10, 2)) +
+      coord_cartesian(ylim = c(0, 175), xlim = c(-6, 6)) +
+      scale_x_continuous(breaks = seq(-6, 6, 1)) +
       scale_y_continuous(breaks = seq(0, 175, 25)) +
       labs(
         title = paste(nickname),
@@ -2155,21 +2321,21 @@ create_volcano_transcripto <- function(toptables, save_path = "figures/02_differ
         plot.background = element_rect(fill = "#FFFFFF"),
         panel.background = element_rect(fill = "#FFFFFF"),
         plot.margin = margin(t = 10, r = 10, b = 10, l = 10, unit = "pt"),
-        plot.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(1.5)),
+        plot.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", hjust = 0, size = rel(2)),
         plot.subtitle = element_text(color = "black", family = "Helvetica Neue", hjust = 0, size = rel(1)),
 
         # Axis titles and texts
-        axis.title.x = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)),
-        axis.text.x = element_text(color = "black", family = "Helvetica Neue", size = rel(0.8), angle = 0, hjust = 0.5),
-        axis.title.y = element_text(color = "black", family = "Helvetica Neue", size = rel(0.9)),
-        axis.text.y = element_text(color = "black", family = "Helvetica Neue", size = rel(0.8), angle = 0, hjust = 0.5),
+        axis.title.x = element_text(color = "black", family = "Helvetica Neue", size = rel(1.25)),
+        axis.text.x = element_text(color = "black", family = "Helvetica Neue", size = rel(1), angle = 0, hjust = 0.5),
+        axis.title.y = element_text(color = "black", family = "Helvetica Neue", size = rel(1.25)),
+        axis.text.y = element_text(color = "black", family = "Helvetica Neue", size = rel(1), angle = 0, hjust = 0.5),
         axis.line = element_line(color = "#5f5f5f", linetype = "solid", linewidth = 0.25),
         axis.ticks = element_line(color = "black", linetype = "solid", linewidth = 0.25),
-        panel.grid.major = element_line(color = "#EAEAEA", linetype = "dotted", linewidth = 0.25),
+        panel.grid.major = element_line(color = "grey95", linetype = "solid", linewidth = 0.30),
 
         # Legend
         legend.box.margin = margin(0.1, 0.1, 0.1, 0.1),
-        legend.position = c(0.25, 0.85),
+        legend.position = c(0.20, 0.85),
         legend.background = element_rect(fill = "#FFFFFF", color = "#5f5f5f", linewidth = 0.1, linetype = "solid"),
         legend.key.size = unit(0.5, "cm"),
         legend.title = element_text(color = "black", family = "Helvetica Neue", face = "bold", size = rel(1)),
