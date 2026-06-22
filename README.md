@@ -63,6 +63,8 @@ The scripts assume that the following files are available in `data/00_raw/`:
 | Transcriptomics background matrix | `transcripto_endopath_vst.csv` | `scripts/03_transcriptomics_analysis.R` |
 | Gene-set databases | `*.gmt` | Proteomics and transcriptomics GSEA/ORA |
 
+The `.gmt` gene-set databases (v2026_1_hs_symbols) can be downloaded from MSigDB: [GOBP](https://www.gsea-msigdb.org/gsea/msigdb/download_file.jsp?filePath=/msigdb/release/2026.1.Hs/c5.go.bp.v2026.1.Hs.symbols.gmt) and [Reactome](https://www.gsea-msigdb.org/gsea/msigdb/download_file.jsp?filePath=/msigdb/release/2026.1.Hs/c2.cp.reactome.v2026.1.Hs.symbols.gmt).
+
 The proteomics workflow also reads and writes top tables in:
 
 - `data/01_proteo_toptables/`
