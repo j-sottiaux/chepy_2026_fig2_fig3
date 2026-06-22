@@ -8,7 +8,7 @@ The repository is intended for scientific reviewers who want to inspect, rerun, 
 
 ```text
 .
-├── 01_chepy_and_al_2026_Fig2_And_Fig3.Rproj
+├── chepy_2026_fig2_fig3.Rproj
 ├── codex_shiny/
 │   └── app.R
 ├── data/
@@ -75,7 +75,7 @@ The proteomics workflow also reads and writes top tables in:
 Open the RStudio project file:
 
 ```text
-01_chepy_and_al_2026_Fig2_And_Fig3.Rproj
+chepy_2026_fig2_fig3.Rproj
 ```
 
 Then run the scripts in this order from the project root:
