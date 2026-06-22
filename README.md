@@ -199,7 +199,7 @@ Two Shiny applications are included.
 shiny::runApp("codex_shiny")
 ```
 
-This app uses processed enrichment and differential-analysis data, especially the outputs in `data/08_codex_data/`, to support interactive inspection of condition-specific enrichment results and volcano plots.
+This app uses processed enrichment and differential-analysis proteomic data, especially the outputs in `data/08_codex_data/`, to support interactive inspection of condition-specific enrichment results and volcano plots.
 
 ### Differential-analysis explorer Shiny app
 
