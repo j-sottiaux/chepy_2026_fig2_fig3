@@ -11,7 +11,6 @@ The repository is intended for scientific reviewers who want to inspect, rerun, 
 ├── 01_chepy_and_al_2026_Fig2_And_Fig3.Rproj
 ├── codex_shiny/
 │   └── app.R
-    └── manifest.json
 ├── data/
 │   ├── 00_raw/
 │   ├── 01_proteo_toptables/
